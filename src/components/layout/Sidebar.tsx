@@ -8,6 +8,7 @@ import {
   Mail,
   Inbox,
   Shield,
+  Send,
   ChevronRight,
   Wrench,
   LogOut,
@@ -19,6 +20,7 @@ import { createClientSupabase } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useProxyCheck } from "@/tools/proxy-checker/CheckContext";
+import { useMassSend } from "@/tools/mass-sender/MassSendContext";
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   marketing: <Mail className="w-3.5 h-3.5" />,
@@ -33,6 +35,7 @@ const TOOL_ICONS: Record<string, React.ReactNode> = {
   "email-tracker":   <Mail className="w-4 h-4" />,
   "email-extractor": <Inbox className="w-4 h-4" />,
   "proxy-checker":   <Shield className="w-4 h-4" />,
+  "mass-sender":     <Send className="w-4 h-4" />,
 };
 
 export function Sidebar() {
@@ -40,7 +43,9 @@ export function Sidebar() {
   const router = useRouter();
   const supabase = createClientSupabase();
   const { checking, progress } = useProxyCheck();
+  const { sending, progress: sendProgress } = useMassSend();
   const showCheckingBadge = checking && !pathname.startsWith("/tools/proxy-checker");
+  const showSendingBadge  = sending  && !pathname.startsWith("/tools/mass-sender");
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -106,6 +111,33 @@ export function Sidebar() {
           </div>
         ))}
       </nav>
+
+      {/* Mass send background indicator */}
+      {showSendingBadge && sendProgress && (
+        <Link href="/tools/mass-sender" className="mx-3 mb-2 flex flex-col gap-1.5 glass rounded-lg px-3 py-2 border border-indigo-500/20 hover:border-indigo-500/40 transition-colors">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className={`w-1.5 h-1.5 rounded-full ${sendProgress.status === "paused" ? "bg-yellow-400" : "bg-indigo-400 animate-pulse"}`} />
+              <span className="text-[10px] font-semibold text-indigo-300">
+                {sendProgress.status === "paused" ? "Paused" : "Mass Send Running"}
+              </span>
+            </div>
+            <span className="text-[10px] tabular-nums text-slate-500">
+              {Math.round((sendProgress.sent / sendProgress.total) * 100)}%
+            </span>
+          </div>
+          <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all duration-300"
+              style={{ width: `${(sendProgress.sent / sendProgress.total) * 100}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-[9px] text-slate-600 tabular-nums">
+            <span className="text-indigo-400">{sendProgress.sent.toLocaleString()} sent</span>
+            <span>{sendProgress.sent.toLocaleString()} / {sendProgress.total.toLocaleString()}</span>
+          </div>
+        </Link>
+      )}
 
       {/* Background check indicator */}
       {showCheckingBadge && progress && (
