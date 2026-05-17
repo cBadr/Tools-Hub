@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useMemo } from "react";
 import useSWR from "swr";
 import {
-  Play, Trash2, Download, Layers, Settings2, RefreshCw, CheckSquare, XSquare, Filter, AlertCircle, CheckCircle2,
+  Play, Trash2, Download, Layers, Settings2, RefreshCw, CheckSquare, XSquare,
+  Filter, AlertCircle, CheckCircle2, Zap,
 } from "lucide-react";
 import { createClientSupabase } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -13,60 +14,76 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { FetchSourcesDialog } from "./components/FetchSourcesDialog";
 import { ImportDialog } from "./components/ImportDialog";
 import { ProxyTable, type ProxyRow } from "./components/ProxyTable";
-import { CheckProgressWidget, type CheckProgress } from "./components/CheckProgressWidget";
-import type { ParsedProxy, ProxyType } from "./lib/sources";
+import { CheckProgressWidget } from "./components/CheckProgressWidget";
+import { useProxyCheck, type CheckSettings } from "./CheckContext";
+import type { ParsedProxy } from "./lib/sources";
 import type { ToolProps } from "./../_registry/types";
 
-interface CheckSettings {
-  testUrl: string;
-  testKeyword: string;
-  timeoutMs: number;
-  concurrency: number;  // proxies per API call (batch size)
-  threads: number;      // parallel API calls per wave (1-10)
-}
-
 export default function ProxyChecker({ config }: ToolProps) {
-  const cfg = config as { defaultTestUrl?: string; defaultTestKeyword?: string; defaultTimeout?: number; defaultConcurrency?: number };
+  const cfg = config as {
+    defaultTestUrl?: string;
+    defaultTestKeyword?: string;
+    defaultTimeout?: number;
+    defaultConcurrency?: number;
+  };
 
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [saveMsg, setSaveMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [filterType,   setFilterType]   = useState("all");
-  const [showSettings, setShowSettings] = useState(false);
+  const { checking, progress, startCheck, stopCheck, dismissProgress } = useProxyCheck();
+
+  const [selected,      setSelected]      = useState<Set<string>>(new Set());
+  const [saveMsg,       setSaveMsg]        = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [filterStatus,  setFilterStatus]   = useState("all");
+  const [filterType,    setFilterType]     = useState("all");
+  const [showSettings,  setShowSettings]   = useState(false);
   const [settings, setSettings] = useState<CheckSettings>({
-    testUrl:     cfg.defaultTestUrl    ?? "https://www.google.com",
-    testKeyword: cfg.defaultTestKeyword ?? "",
-    timeoutMs:   (cfg.defaultTimeout   ?? 10) * 1000,
-    concurrency: cfg.defaultConcurrency ?? 50,
-    threads:     3,
+    testUrl:       cfg.defaultTestUrl    ?? "https://www.google.com",
+    testKeyword:   cfg.defaultTestKeyword ?? "",
+    timeoutMs:     (cfg.defaultTimeout   ?? 10) * 1000,
+    concurrency:   cfg.defaultConcurrency ?? 50,
+    threads:       3,
+    autoDeleteDead: false,
   });
-
-  const [checking,     setChecking]     = useState(false);
-  const [checkProgress, setCheckProgress] = useState<CheckProgress | null>(null);
-  const stopRef = useRef(false);
 
   const supabase = createClientSupabase();
 
+  // ── Proxy list (table data) ──────────────────────────────────────────────
   const { data: proxies, isLoading, mutate } = useSWR<ProxyRow[]>(
     "proxies_list",
     async () => {
-      const { data } = await supabase.from("proxies").select("*").order("created_at", { ascending: false });
+      const { data } = await supabase
+        .from("proxies")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .range(0, 4999);
       return (data ?? []) as ProxyRow[];
     },
     { refreshInterval: checking ? 3000 : 0 },
   );
 
-  const stats = useMemo(() => {
-    const all = proxies ?? [];
-    return {
-      total:     all.length,
-      live:      all.filter((r) => r.status === "live").length,
-      dead:      all.filter((r) => r.status === "dead").length,
-      unchecked: all.filter((r) => r.status === "unchecked").length,
-    };
-  }, [proxies]);
+  // ── Accurate stats via count queries ────────────────────────────────────
+  const { data: stats, mutate: mutateStats } = useSWR(
+    "proxy_stats",
+    async () => {
+      const [total, live, dead, unchecked] = await Promise.all([
+        supabase.from("proxies").select("*", { count: "exact", head: true }),
+        supabase.from("proxies").select("*", { count: "exact", head: true }).eq("status", "live"),
+        supabase.from("proxies").select("*", { count: "exact", head: true }).eq("status", "dead"),
+        supabase.from("proxies").select("*", { count: "exact", head: true }).eq("status", "unchecked"),
+      ]);
+      return {
+        total:     total.count     ?? 0,
+        live:      live.count      ?? 0,
+        dead:      dead.count      ?? 0,
+        unchecked: unchecked.count ?? 0,
+      };
+    },
+    { refreshInterval: checking ? 4000 : 30000 },
+  );
 
-  // ── Save new proxies to DB ──────────────────────────────────────────────
+  const safeStats = stats ?? { total: 0, live: 0, dead: 0, unchecked: 0 };
+
+  const refreshAll = () => { mutate(); mutateStats(); };
+
+  // ── Save new proxies to DB ───────────────────────────────────────────────
   const saveProxies = async (parsed: ParsedProxy[]) => {
     if (parsed.length === 0) return;
     const { data: { user } } = await supabase.auth.getUser();
@@ -74,27 +91,22 @@ export default function ProxyChecker({ config }: ToolProps) {
 
     const rows = parsed.map((p) => ({
       user_id: user.id,
-      type: p.type,
-      host: p.host,
-      port: p.port,
-      status: "unchecked" as const,
+      type:    p.type,
+      host:    p.host,
+      port:    p.port,
+      status:  "unchecked" as const,
     }));
 
-    // Supabase PostgREST fails silently on large payloads — batch into chunks of 500
     const CHUNK = 500;
     let inserted = 0;
     let firstError: string | null = null;
 
     for (let i = 0; i < rows.length; i += CHUNK) {
-      const chunk = rows.slice(i, i + CHUNK);
       const { error } = await supabase
         .from("proxies")
-        .upsert(chunk, { onConflict: "user_id,host,port,type", ignoreDuplicates: true });
-      if (error) {
-        firstError = error.message;
-        break;
-      }
-      inserted += chunk.length;
+        .upsert(rows.slice(i, i + CHUNK), { onConflict: "user_id,host,port,type", ignoreDuplicates: true });
+      if (error) { firstError = error.message; break; }
+      inserted += Math.min(CHUNK, rows.length - i);
     }
 
     if (firstError) {
@@ -103,10 +115,10 @@ export default function ProxyChecker({ config }: ToolProps) {
       setSaveMsg({ type: "ok", text: `${inserted.toLocaleString()} proxies imported` });
       setTimeout(() => setSaveMsg(null), 4000);
     }
-    mutate();
+    refreshAll();
   };
 
-  // ── Selection helpers ───────────────────────────────────────────────────
+  // ── Selection helpers ────────────────────────────────────────────────────
   const toggleSelect = (id: string) =>
     setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
@@ -114,16 +126,15 @@ export default function ProxyChecker({ config }: ToolProps) {
     const visible = (proxies ?? [])
       .filter((r) => (filterStatus === "all" || r.status === filterStatus) && (filterType === "all" || r.type === filterType))
       .map((r) => r.id);
-    const allSelected = visible.every((id) => selected.has(id));
-    if (allSelected) setSelected(new Set());
-    else setSelected(new Set(visible));
+    const allSel = visible.every((id) => selected.has(id));
+    setSelected(allSel ? new Set() : new Set(visible));
   };
 
-  // ── Delete ──────────────────────────────────────────────────────────────
+  // ── Delete helpers ───────────────────────────────────────────────────────
   const deleteOne = async (id: string) => {
     await supabase.from("proxies").delete().eq("id", id);
     setSelected((p) => { const n = new Set(p); n.delete(id); return n; });
-    mutate();
+    refreshAll();
   };
 
   const deleteSelected = async () => {
@@ -131,14 +142,22 @@ export default function ProxyChecker({ config }: ToolProps) {
     if (!confirm(`Delete ${selected.size} selected proxies?`)) return;
     await supabase.from("proxies").delete().in("id", [...selected]);
     setSelected(new Set());
-    mutate();
+    refreshAll();
   };
 
   const deleteDead = async () => {
     if (!confirm("Delete all dead proxies?")) return;
     await supabase.from("proxies").delete().eq("status", "dead");
     setSelected(new Set());
-    mutate();
+    refreshAll();
+  };
+
+  const deleteAll = async () => {
+    if (!confirm(`Delete ALL ${safeStats.total.toLocaleString()} proxies? This cannot be undone.`)) return;
+    // Delete in batches using user RLS
+    await supabase.from("proxies").delete().in("status", ["unchecked", "live", "dead"]);
+    setSelected(new Set());
+    refreshAll();
   };
 
   const deleteDuplicates = async () => {
@@ -146,7 +165,6 @@ export default function ProxyChecker({ config }: ToolProps) {
     const all = proxies ?? [];
     const seen = new Map<string, string>();
     const toDelete: string[] = [];
-    // Iterate from newest (first) to oldest
     for (const p of all) {
       const key = `${p.type}:${p.host}:${p.port}`;
       if (seen.has(key)) toDelete.push(seen.get(key)!);
@@ -154,120 +172,40 @@ export default function ProxyChecker({ config }: ToolProps) {
     }
     if (toDelete.length > 0) {
       await supabase.from("proxies").delete().in("id", toDelete);
-      mutate();
+      refreshAll();
     }
   };
 
-  // ── Checking ────────────────────────────────────────────────────────────
-  type BatchResult = { id: string; status: string; latencyMs?: number; jitterMs?: number; country?: string; countryCode?: string; city?: string; isp?: string; anonymity?: string };
+  // ── Check helpers (delegate to context) ─────────────────────────────────
+  const toCheckItems = (rows: ProxyRow[]) =>
+    rows.map((p) => ({ id: p.id, type: p.type, host: p.host, port: p.port }));
 
-  const fetchBatch = useCallback(async (batch: ProxyRow[]): Promise<BatchResult[]> => {
-    try {
-      const res = await fetch("/api/proxy-checker/check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          proxies: batch.map((p) => ({ id: p.id, type: p.type, host: p.host, port: p.port })),
-          testUrl: settings.testUrl,
-          testKeyword: settings.testKeyword || undefined,
-          timeoutMs: settings.timeoutMs,
-        }),
-      });
-      if (!res.ok) return [];
-      const data = await res.json();
-      return (data.results ?? []) as BatchResult[];
-    } catch {
-      return [];
-    }
-  }, [settings]);
+  const checkSelected  = () => startCheck(toCheckItems((proxies ?? []).filter((r) => selected.has(r.id))), settings);
+  const checkAll       = () => startCheck(toCheckItems(proxies ?? []), settings);
+  const checkUnchecked = () => startCheck(toCheckItems((proxies ?? []).filter((r) => r.status === "unchecked")), settings);
+  const checkOne       = (proxy: ProxyRow) => startCheck(toCheckItems([proxy]), settings);
 
-  const runCheck = useCallback(async (toCheck: ProxyRow[]) => {
-    if (toCheck.length === 0 || checking) return;
-    stopRef.current = false;
-    setChecking(true);
-    setCheckProgress({ total: toCheck.length, checked: 0, live: 0, dead: 0, status: "running" });
-
-    const batchSize = Math.min(Math.max(settings.concurrency, 1), 100);
-    const threads   = Math.min(Math.max(settings.threads, 1), 10);
-    const waveSize  = batchSize * threads;  // proxies processed per wave
-    const checkedAt = new Date().toISOString();
-    let checked = 0, live = 0, dead = 0;
-
-    for (let i = 0; i < toCheck.length && !stopRef.current; i += waveSize) {
-      // Build `threads` batches for this wave
-      const batches: ProxyRow[][] = [];
-      for (let t = 0; t < threads; t++) {
-        const slice = toCheck.slice(i + t * batchSize, i + (t + 1) * batchSize);
-        if (slice.length > 0) batches.push(slice);
-      }
-
-      // Fire all batches in parallel
-      const waveResults = await Promise.all(batches.map(fetchBatch));
-      const allResults = waveResults.flat();
-
-      // Bulk-save all results concurrently (parallel DB updates per wave)
-      await Promise.all(allResults.map((r) =>
-        supabase.from("proxies").update({
-          status: r.status,
-          latency_ms: r.latencyMs ?? null,
-          jitter_ms:  r.jitterMs ?? null,
-          country:    r.country ?? null,
-          country_code: r.countryCode ?? null,
-          city:       r.city ?? null,
-          isp:        r.isp ?? null,
-          anonymity:  r.anonymity ?? null,
-          last_checked_at: checkedAt,
-        }).eq("id", r.id)
-      ));
-
-      checked += allResults.length;
-      live    += allResults.filter((r) => r.status === "live").length;
-      dead    += allResults.filter((r) => r.status === "dead").length;
-
-      setCheckProgress({ total: toCheck.length, checked, live, dead, status: "running" });
-      mutate();
-    }
-
-    setChecking(false);
-    setCheckProgress((p) => p ? { ...p, status: stopRef.current ? "cancelled" : "completed" } : null);
-    mutate();
-  }, [checking, settings, fetchBatch, supabase, mutate]);
-
-  const checkSelected = () => {
-    const toCheck = (proxies ?? []).filter((r) => selected.has(r.id));
-    runCheck(toCheck);
-  };
-
-  const checkAll = () => {
-    const all = proxies ?? [];
-    runCheck(all.filter((r) => r.status !== "live")); // skip already live
-  };
-
-  const checkUnchecked = () => {
-    runCheck((proxies ?? []).filter((r) => r.status === "unchecked"));
-  };
-
-  const checkOne = (proxy: ProxyRow) => runCheck([proxy]);
-
-  // ── Export ──────────────────────────────────────────────────────────────
+  // ── Export ───────────────────────────────────────────────────────────────
   const exportCSV = (onlyLive = false) => {
     const rows = (proxies ?? []).filter((r) => !onlyLive || r.status === "live");
     if (rows.length === 0) return;
-    const header = ["Type", "Host", "Port", "Status", "Latency (ms)", "Jitter (ms)", "Country", "City", "ISP", "Anonymity", "Last Checked"];
+    const header = ["Type","Host","Port","Status","Latency (ms)","Jitter (ms)","Country","City","ISP","Anonymity","Last Checked"];
     const lines = rows.map((r) => [
       r.type, r.host, r.port, r.status, r.latency_ms ?? "", r.jitter_ms ?? "",
       r.country ?? "", r.city ?? "", r.isp ?? "", r.anonymity ?? "",
       r.last_checked_at ? new Date(r.last_checked_at).toLocaleString() : "",
     ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","));
-    const csv = [header.join(","), ...lines].join("\n");
+    const csv  = [header.join(","), ...lines].join("\n");
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url;
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url;
     a.download = `proxies-${onlyLive ? "live-" : ""}${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click(); URL.revokeObjectURL(url);
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
-  const isDone = checkProgress?.status === "completed" || checkProgress?.status === "cancelled";
+  const isDone = progress?.status === "completed" || progress?.status === "cancelled";
 
   return (
     <div className="space-y-5">
@@ -280,7 +218,7 @@ export default function ProxyChecker({ config }: ToolProps) {
         }`}>
           {saveMsg.type === "ok"
             ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-            : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
+            : <AlertCircle  className="w-4 h-4 flex-shrink-0" />}
           {saveMsg.text}
         </div>
       )}
@@ -288,10 +226,10 @@ export default function ProxyChecker({ config }: ToolProps) {
       {/* Stats bar */}
       <div className="grid grid-cols-4 gap-3">
         {[
-          { label: "Total",     value: stats.total,     color: "text-white" },
-          { label: "Live",      value: stats.live,      color: "text-green-400" },
-          { label: "Dead",      value: stats.dead,      color: "text-red-400" },
-          { label: "Unchecked", value: stats.unchecked, color: "text-slate-500" },
+          { label: "Total",     value: safeStats.total,     color: "text-white" },
+          { label: "Live",      value: safeStats.live,      color: "text-green-400" },
+          { label: "Dead",      value: safeStats.dead,      color: "text-red-400" },
+          { label: "Unchecked", value: safeStats.unchecked, color: "text-slate-500" },
         ].map(({ label, value, color }) => (
           <div key={label} className="glass rounded-xl p-4 text-center">
             <div className={`text-2xl font-bold tabular-nums ${color}`}>{value.toLocaleString()}</div>
@@ -305,14 +243,14 @@ export default function ProxyChecker({ config }: ToolProps) {
         <FetchSourcesDialog onFetched={saveProxies} />
         <ImportDialog onImport={saveProxies} />
 
-        {/* Check dropdown */}
+        {/* Check group */}
         <div className="flex items-center gap-1 glass rounded-lg px-1 py-1 border border-white/5">
-          <Button size="sm" onClick={checkUnchecked} disabled={checking || stats.unchecked === 0}
+          <Button size="sm" onClick={checkUnchecked} disabled={checking || safeStats.unchecked === 0}
             className="gap-1.5 bg-gradient-to-r from-green-700 to-emerald-700 hover:from-green-600 hover:to-emerald-600 text-white h-7 text-xs shadow-none">
             <Play className="w-3 h-3" /> Check Unchecked
           </Button>
-          <Button size="sm" variant="ghost" onClick={checkAll} disabled={checking || stats.total === 0}
-            title="Check all (re-check live too)" className="h-7 text-xs text-slate-400 hover:text-white hover:bg-white/5 px-2">
+          <Button size="sm" variant="ghost" onClick={checkAll} disabled={checking || safeStats.total === 0}
+            title="Re-check all" className="h-7 text-xs text-slate-400 hover:text-white hover:bg-white/5 px-2">
             All
           </Button>
           {selected.size > 0 && (
@@ -327,12 +265,12 @@ export default function ProxyChecker({ config }: ToolProps) {
 
         {/* Export */}
         <Button size="sm" variant="outline" onClick={() => exportCSV(false)}
-          disabled={stats.total === 0}
+          disabled={safeStats.total === 0}
           className="gap-1.5 border-white/10 text-slate-300 hover:bg-white/5 h-8 text-xs">
           <Download className="w-3 h-3" /> Export All
         </Button>
         <Button size="sm" variant="outline" onClick={() => exportCSV(true)}
-          disabled={stats.live === 0}
+          disabled={safeStats.live === 0}
           className="gap-1.5 border-green-500/20 text-green-400 hover:bg-green-500/10 h-8 text-xs">
           <Download className="w-3 h-3" /> Live CSV
         </Button>
@@ -345,13 +283,18 @@ export default function ProxyChecker({ config }: ToolProps) {
           </Button>
         )}
         <Button size="sm" variant="outline" onClick={deleteDead}
-          disabled={stats.dead === 0}
+          disabled={safeStats.dead === 0}
           className="gap-1.5 border-red-500/10 text-red-500/60 hover:bg-red-500/10 hover:text-red-400 h-8 text-xs">
           <XSquare className="w-3 h-3" /> Delete Dead
         </Button>
         <Button size="sm" variant="outline" onClick={deleteDuplicates}
           className="gap-1.5 border-white/10 text-slate-500 hover:bg-white/5 hover:text-white h-8 text-xs">
           <Layers className="w-3 h-3" /> Dedup
+        </Button>
+        <Button size="sm" variant="outline" onClick={deleteAll}
+          disabled={safeStats.total === 0}
+          className="gap-1.5 border-red-500/30 text-red-400/70 hover:bg-red-500/10 hover:text-red-400 h-8 text-xs">
+          <Trash2 className="w-3 h-3" /> Delete All
         </Button>
 
         <Button size="sm" variant="ghost" onClick={() => setShowSettings((v) => !v)}
@@ -362,7 +305,7 @@ export default function ProxyChecker({ config }: ToolProps) {
 
       {/* Check settings panel */}
       {showSettings && (
-        <div className="glass rounded-xl p-4 space-y-3 border border-white/5">
+        <div className="glass rounded-xl p-4 space-y-4 border border-white/5">
           <div className="flex items-center justify-between">
             <p className="text-xs font-semibold text-white">Check Settings</p>
             <span className="text-[10px] text-slate-500">
@@ -402,25 +345,35 @@ export default function ProxyChecker({ config }: ToolProps) {
             </div>
             <div className="space-y-1.5">
               <Label className="text-[10px] flex items-center gap-1.5 text-violet-400/80">
-                Threads
-                <span className="text-[9px] text-slate-600 font-normal">parallel API calls</span>
+                Threads <span className="text-[9px] text-slate-600 font-normal">parallel calls</span>
               </Label>
               <div className="flex gap-1">
                 {[1, 2, 3, 5, 10].map((n) => (
-                  <button
-                    key={n}
-                    onClick={() => setSettings((s) => ({ ...s, threads: n }))}
+                  <button key={n} onClick={() => setSettings((s) => ({ ...s, threads: n }))}
                     className={`flex-1 text-[11px] font-semibold py-1 rounded border transition-colors ${
                       settings.threads === n
                         ? "bg-violet-600/30 border-violet-500/40 text-violet-300"
                         : "border-white/10 text-slate-500 hover:border-white/20 hover:text-white"
-                    }`}
-                  >
+                    }`}>
                     {n}
                   </button>
                 ))}
               </div>
             </div>
+          </div>
+
+          {/* Auto-delete dead toggle */}
+          <div className="flex items-center justify-between pt-2 border-t border-white/5">
+            <div>
+              <p className="text-xs font-medium text-white">Auto-delete dead proxies</p>
+              <p className="text-[10px] text-slate-600 mt-0.5">Immediately remove proxies that fail the check</p>
+            </div>
+            <button
+              onClick={() => setSettings((s) => ({ ...s, autoDeleteDead: !s.autoDeleteDead }))}
+              className={`relative w-9 h-5 rounded-full transition-colors ${settings.autoDeleteDead ? "bg-red-500/70" : "bg-white/10"}`}
+            >
+              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${settings.autoDeleteDead ? "left-[18px]" : "left-0.5"}`} />
+            </button>
           </div>
         </div>
       )}
@@ -444,7 +397,7 @@ export default function ProxyChecker({ config }: ToolProps) {
             </button>
           ))}
         </div>
-        <button onClick={() => mutate()} className="ml-auto text-slate-600 hover:text-slate-300 p-1">
+        <button onClick={refreshAll} className="ml-auto text-slate-600 hover:text-slate-300 p-1">
           <RefreshCw className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -452,7 +405,7 @@ export default function ProxyChecker({ config }: ToolProps) {
       {/* Table */}
       {isLoading ? (
         <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full rounded-lg bg-white/5" />)}</div>
-      ) : stats.total === 0 ? (
+      ) : safeStats.total === 0 ? (
         <div className="glass rounded-xl p-12 text-center">
           <div className="w-14 h-14 rounded-2xl bg-violet-600/10 flex items-center justify-center mx-auto mb-4">
             <CheckSquare className="w-7 h-7 text-violet-400" />
@@ -474,20 +427,20 @@ export default function ProxyChecker({ config }: ToolProps) {
       )}
 
       {/* Progress widget */}
-      {(checking || (checkProgress && !isDone)) && (
+      {(checking || (progress && !isDone)) && (
         <CheckProgressWidget
-          progress={checkProgress}
+          progress={progress}
           checking={checking}
-          onStop={() => { stopRef.current = true; }}
-          onDismiss={() => setCheckProgress(null)}
+          onStop={stopCheck}
+          onDismiss={dismissProgress}
         />
       )}
-      {isDone && checkProgress && (
+      {isDone && progress && (
         <CheckProgressWidget
-          progress={checkProgress}
+          progress={progress}
           checking={false}
           onStop={() => {}}
-          onDismiss={() => setCheckProgress(null)}
+          onDismiss={dismissProgress}
         />
       )}
     </div>

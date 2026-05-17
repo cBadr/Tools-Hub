@@ -18,6 +18,7 @@ import { toolRegistry } from "@/tools/_registry";
 import { createClientSupabase } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useProxyCheck } from "@/tools/proxy-checker/CheckContext";
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   marketing: <Mail className="w-3.5 h-3.5" />,
@@ -38,6 +39,8 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClientSupabase();
+  const { checking, progress } = useProxyCheck();
+  const showCheckingBadge = checking && !pathname.startsWith("/tools/proxy-checker");
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -103,6 +106,31 @@ export function Sidebar() {
           </div>
         ))}
       </nav>
+
+      {/* Background check indicator */}
+      {showCheckingBadge && progress && (
+        <Link href="/tools/proxy-checker" className="mx-3 mb-2 flex flex-col gap-1.5 glass rounded-lg px-3 py-2 border border-violet-500/20 hover:border-violet-500/40 transition-colors">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+              <span className="text-[10px] font-semibold text-violet-300">Proxy Check Running</span>
+            </div>
+            <span className="text-[10px] tabular-nums text-slate-500">
+              {Math.round((progress.checked / progress.total) * 100)}%
+            </span>
+          </div>
+          <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 rounded-full transition-all duration-300"
+              style={{ width: `${(progress.checked / progress.total) * 100}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-[9px] text-slate-600 tabular-nums">
+            <span className="text-green-500">{progress.live.toLocaleString()} live</span>
+            <span>{progress.checked.toLocaleString()} / {progress.total.toLocaleString()}</span>
+          </div>
+        </Link>
+      )}
 
       {/* Footer */}
       <div className="px-3 py-3 border-t border-violet-900/20 space-y-1">
