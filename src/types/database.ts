@@ -352,6 +352,58 @@ export interface Database {
         Update: {};
         Relationships: [];
       };
+      proxies: {
+        Row: {
+          id: string;
+          user_id: string;
+          type: string;
+          host: string;
+          port: number;
+          username: string | null;
+          password: string | null;
+          status: string;
+          latency_ms: number | null;
+          jitter_ms: number | null;
+          country: string | null;
+          country_code: string | null;
+          city: string | null;
+          isp: string | null;
+          anonymity: string | null;
+          last_checked_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          type?: string;
+          host: string;
+          port: number;
+          username?: string | null;
+          password?: string | null;
+          status?: string;
+          latency_ms?: number | null;
+          jitter_ms?: number | null;
+          country?: string | null;
+          country_code?: string | null;
+          city?: string | null;
+          isp?: string | null;
+          anonymity?: string | null;
+          last_checked_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          status?: string;
+          latency_ms?: number | null;
+          jitter_ms?: number | null;
+          country?: string | null;
+          country_code?: string | null;
+          city?: string | null;
+          isp?: string | null;
+          anonymity?: string | null;
+          last_checked_at?: string | null;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

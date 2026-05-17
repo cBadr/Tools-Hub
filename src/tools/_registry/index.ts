@@ -1,11 +1,13 @@
 import type { ToolDefinition, ToolCategory } from "./types";
 import emailTrackerDef   from "../email-tracker/manifest";
 import emailExtractorDef from "../email-extractor/manifest";
+import proxyCheckerDef   from "../proxy-checker/manifest";
 
 // Adding a new tool: create its folder and add one import line below.
 export const toolRegistry: ToolDefinition[] = [
   emailTrackerDef,
   emailExtractorDef,
+  proxyCheckerDef,
 ].filter((t) => t.isActive);
 
 export function getToolBySlug(slug: string): ToolDefinition | undefined {
