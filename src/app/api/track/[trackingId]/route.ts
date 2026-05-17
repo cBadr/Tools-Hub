@@ -146,6 +146,7 @@ export async function GET(
       userId: campaign.user_id,
       campaignName: campaign.name,
       recipientEmail,
+      referer,
       eventId: eventRow?.id,
       ip,
       geo,
@@ -162,6 +163,7 @@ async function sendTelegramNotificationAsync({
   userId,
   campaignName,
   recipientEmail,
+  referer,
   eventId,
   ip,
   geo,
@@ -172,6 +174,7 @@ async function sendTelegramNotificationAsync({
   userId: string;
   campaignName: string;
   recipientEmail: string | null;
+  referer: string | null;
   eventId: number | undefined;
   ip: string;
   geo: Awaited<ReturnType<typeof getGeoData>>;
@@ -194,6 +197,7 @@ async function sendTelegramNotificationAsync({
     chatId: config.telegramChatId,
     campaignName,
     recipientEmail,
+    referer,
     ip,
     geo,
     ua,

@@ -204,10 +204,17 @@ function EventRow({ event }: { event: OpenEvent }) {
       <TableCell className="text-xs text-slate-400 whitespace-nowrap py-3">
         <span title={formatDateTime(event.opened_at)}>{formatRelativeTime(event.opened_at)}</span>
       </TableCell>
-      <TableCell className="text-xs py-3 max-w-[140px]">
+      <TableCell className="text-xs py-3 max-w-[160px]">
         {event.recipient_email ? (
           <span className="text-violet-300 font-mono truncate block" title={event.recipient_email}>
             {event.recipient_email}
+          </span>
+        ) : event.referer ? (
+          <span className="text-slate-500 truncate block" title={event.referer}>
+            <span className="text-slate-600 text-[10px]">via </span>
+            {(() => {
+              try { return new URL(event.referer).hostname; } catch { return event.referer.slice(0, 30); }
+            })()}
           </span>
         ) : (
           <span className="text-slate-700">—</span>

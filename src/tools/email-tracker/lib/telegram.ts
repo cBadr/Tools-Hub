@@ -7,6 +7,7 @@ interface NotificationPayload {
   chatId: string;
   campaignName: string;
   recipientEmail: string | null;
+  referer: string | null;
   ip: string;
   geo: GeoData | null;
   ua: ReturnType<typeof parseUserAgent>;
@@ -20,7 +21,7 @@ function h(text: string | null | undefined): string {
 }
 
 export async function sendTelegramNotification(payload: NotificationPayload): Promise<string | null> {
-  const { botToken, chatId, campaignName, recipientEmail, ip, geo, ua } = payload;
+  const { botToken, chatId, campaignName, recipientEmail, referer, ip, geo, ua } = payload;
 
   const flag = geo?.countryCode ? getCountryFlag(geo.countryCode) : "🌐";
   const now = formatDateTime(new Date());
@@ -33,11 +34,20 @@ export async function sendTelegramNotification(payload: NotificationPayload): Pr
     ? `${h(ua.device.vendor)} ${h(ua.device.model)}`
     : deviceType;
 
+  // Shorten referer for display (keep domain + path, max 80 chars)
+  const refererShort = referer
+    ? (referer.length > 80 ? referer.slice(0, 77) + "…" : referer)
+    : null;
+
   const lines: (string | null)[] = [
     `📧 <b>Email Opened!</b>`,
     ``,
     `📋 <b>Campaign:</b> ${h(campaignName)}`,
-    recipientEmail ? `✉️ <b>Recipient:</b> <code>${h(recipientEmail)}</code>` : null,
+    recipientEmail
+      ? `✉️ <b>Recipient:</b> <code>${h(recipientEmail)}</code>`
+      : refererShort
+        ? `🔍 <b>Source:</b> <code>${h(refererShort)}</code>`
+        : null,
     `🕐 <b>Time:</b> ${h(now)}`,
     ``,
     `🌍 <b>Location</b>`,
