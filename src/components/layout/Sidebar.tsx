@@ -6,6 +6,8 @@ import {
   LayoutDashboard,
   Settings,
   Mail,
+  Inbox,
+  Shield,
   ChevronRight,
   Wrench,
   LogOut,
@@ -27,7 +29,9 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
 };
 
 const TOOL_ICONS: Record<string, React.ReactNode> = {
-  "email-tracker": <Mail className="w-4 h-4" />,
+  "email-tracker":   <Mail className="w-4 h-4" />,
+  "email-extractor": <Inbox className="w-4 h-4" />,
+  "proxy-checker":   <Shield className="w-4 h-4" />,
 };
 
 export function Sidebar() {
