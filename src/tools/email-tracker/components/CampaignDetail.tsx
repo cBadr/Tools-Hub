@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
-import { ArrowLeft, Copy, Check, Eye, Globe, Clock, Mail } from "lucide-react";
+import { ArrowLeft, Copy, Check, Eye, Globe, Clock, Mail, Trash2, Filter, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -29,9 +29,10 @@ export function CampaignDetail({ campaign, onBack, baseUrl }: Props) {
   const [copied, setCopied] = useState<string | null>(null);
   const [activeType, setActiveType] = useState<TrackingType>("img");
   const [recipientEmail, setRecipientEmail] = useState("");
+  const [deleting, setDeleting] = useState<"all" | "dupes" | null>(null);
   const supabase = createClientSupabase();
 
-  const { data: events, isLoading } = useSWR(
+  const { data: events, isLoading, mutate } = useSWR(
     ["open_events", campaign.id],
     async () => {
       const { data } = await supabase
@@ -49,6 +50,51 @@ export function CampaignDetail({ campaign, onBack, baseUrl }: Props) {
     await navigator.clipboard.writeText(text);
     setCopied(key);
     setTimeout(() => setCopied(null), 2000);
+  };
+
+  const handleDeleteAll = async () => {
+    if (!confirm(`Delete all ${events?.length ?? 0} events for this campaign? This cannot be undone.`)) return;
+    setDeleting("all");
+    await supabase.from("email_open_events").delete().eq("campaign_id", campaign.id);
+    await supabase.from("email_campaigns").update({ open_count: 0, last_opened_at: null }).eq("id", campaign.id);
+    await mutate([]);
+    setDeleting(null);
+  };
+
+  const handleDeleteDuplicates = async () => {
+    if (!events || events.length === 0) return;
+
+    // Keep the earliest event per IP; delete the rest (IPs without address grouped together)
+    const seen = new Set<string>();
+    const toDelete: number[] = [];
+
+    // Sort oldest first so we keep the first occurrence
+    const sorted = [...events].sort(
+      (a, b) => new Date(a.opened_at).getTime() - new Date(b.opened_at).getTime()
+    );
+
+    for (const e of sorted) {
+      const key = e.ip_address ?? `__no_ip_${e.id}`;
+      if (seen.has(key)) {
+        toDelete.push(e.id);
+      } else {
+        seen.add(key);
+      }
+    }
+
+    if (toDelete.length === 0) {
+      alert("No duplicate events found.");
+      return;
+    }
+
+    if (!confirm(`Delete ${toDelete.length} duplicate event(s)? Only the first open per IP will be kept.`)) return;
+
+    setDeleting("dupes");
+    await supabase.from("email_open_events").delete().in("id", toDelete);
+    const newCount = events.length - toDelete.length;
+    await supabase.from("email_campaigns").update({ open_count: newCount }).eq("id", campaign.id);
+    await mutate();
+    setDeleting(null);
   };
 
   const email = recipientEmail.trim() || undefined;
@@ -151,12 +197,42 @@ export function CampaignDetail({ campaign, onBack, baseUrl }: Props) {
 
       {/* Events table */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-slate-300">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-slate-300 shrink-0">
             Open Events
             {events && <span className="ml-2 text-slate-600 font-normal">({events.length})</span>}
           </h3>
-          <span className="text-[10px] text-slate-600">Auto-refreshes every 10s</span>
+          <div className="flex items-center gap-2">
+            {events && events.length > 0 && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={!!deleting}
+                  onClick={handleDeleteDuplicates}
+                  className="h-7 gap-1.5 text-xs text-amber-400/70 hover:text-amber-300 hover:bg-amber-500/10 border border-amber-500/20"
+                >
+                  {deleting === "dupes"
+                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                    : <Filter className="w-3 h-3" />}
+                  Delete duplicates
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={!!deleting}
+                  onClick={handleDeleteAll}
+                  className="h-7 gap-1.5 text-xs text-red-400/70 hover:text-red-300 hover:bg-red-500/10 border border-red-500/20"
+                >
+                  {deleting === "all"
+                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                    : <Trash2 className="w-3 h-3" />}
+                  Delete all
+                </Button>
+              </>
+            )}
+            <span className="text-[10px] text-slate-700 shrink-0">Auto-refreshes every 10s</span>
+          </div>
         </div>
 
         {isLoading ? (
