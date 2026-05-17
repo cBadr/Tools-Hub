@@ -75,11 +75,10 @@ function PinButton({ toolSlug, isPinned }: { toolSlug: string; isPinned: boolean
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    await supabase.from("tool_configs").upsert({
-      user_id: user.id,
-      tool_slug: toolSlug,
-      is_pinned: !isPinned,
-    });
+    await supabase.from("tool_configs").upsert(
+      { user_id: user.id, tool_slug: toolSlug, is_pinned: !isPinned },
+      { onConflict: "user_id,tool_slug" }
+    );
     mutate();
   };
 

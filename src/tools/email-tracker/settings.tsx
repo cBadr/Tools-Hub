@@ -24,15 +24,18 @@ export default function EmailTrackerSettings({ config, onSave }: ToolSettingsPro
 
   const handleSave = async () => {
     setSaving(true);
-    await onSave({
-      telegramBotToken: botToken,
-      telegramChatId: chatId,
-      notificationsEnabled,
-      notifyOnFirstOpenOnly: firstOpenOnly,
-    });
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+    try {
+      await onSave({
+        telegramBotToken: botToken,
+        telegramChatId: chatId,
+        notificationsEnabled,
+        notifyOnFirstOpenOnly: firstOpenOnly,
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleTest = async () => {

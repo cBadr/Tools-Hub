@@ -45,7 +45,7 @@ function ToolSettingsLoader({ tool }: { tool: NonNullable<ReturnType<typeof getT
   const SettingsComponent = tool.settingsComponent!;
 
   const handleSave = async (newConfig: Record<string, unknown>) => {
-    saveConfig(newConfig);
+    await saveConfig(newConfig);
   };
 
   return <SettingsComponent config={config} onSave={handleSave} />;
