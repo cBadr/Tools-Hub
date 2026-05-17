@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Mail, Inbox, Shield, Wrench, Zap, ArrowRight } from "lucide-react";
+import { Mail, Inbox, Shield, Wrench, Zap, Send, ArrowRight } from "lucide-react";
 import { toolRegistry } from "@/tools/_registry";
 import { Badge } from "@/components/ui/badge";
 
@@ -9,6 +9,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   Shield: <Shield className="w-5 h-5" />,
   Wrench: <Wrench className="w-5 h-5" />,
   Zap:    <Zap className="w-5 h-5" />,
+  Send:   <Send className="w-5 h-5" />,
 };
 
 export const metadata = { title: "Tools — Tools Hub" };
