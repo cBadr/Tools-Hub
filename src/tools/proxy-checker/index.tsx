@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useMemo } from "react";
 import useSWR from "swr";
 import {
-  Play, Trash2, Download, Layers, Settings2, RefreshCw, CheckSquare, XSquare, Filter,
+  Play, Trash2, Download, Layers, Settings2, RefreshCw, CheckSquare, XSquare, Filter, AlertCircle, CheckCircle2,
 } from "lucide-react";
 import { createClientSupabase } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ export default function ProxyChecker({ config }: ToolProps) {
   const cfg = config as { defaultTestUrl?: string; defaultTestKeyword?: string; defaultTimeout?: number; defaultConcurrency?: number };
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [saveMsg, setSaveMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterType,   setFilterType]   = useState("all");
   const [showSettings, setShowSettings] = useState(false);
@@ -74,11 +75,32 @@ export default function ProxyChecker({ config }: ToolProps) {
       type: p.type,
       host: p.host,
       port: p.port,
-      status: "unchecked",
+      status: "unchecked" as const,
     }));
 
-    // Upsert — ignore duplicates
-    await supabase.from("proxies").upsert(rows, { onConflict: "user_id,host,port,type", ignoreDuplicates: true });
+    // Supabase PostgREST fails silently on large payloads — batch into chunks of 500
+    const CHUNK = 500;
+    let inserted = 0;
+    let firstError: string | null = null;
+
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const chunk = rows.slice(i, i + CHUNK);
+      const { error } = await supabase
+        .from("proxies")
+        .upsert(chunk, { onConflict: "user_id,host,port,type", ignoreDuplicates: true });
+      if (error) {
+        firstError = error.message;
+        break;
+      }
+      inserted += chunk.length;
+    }
+
+    if (firstError) {
+      setSaveMsg({ type: "err", text: `Save failed: ${firstError}` });
+    } else {
+      setSaveMsg({ type: "ok", text: `${inserted.toLocaleString()} proxies imported` });
+      setTimeout(() => setSaveMsg(null), 4000);
+    }
     mutate();
   };
 
@@ -228,6 +250,20 @@ export default function ProxyChecker({ config }: ToolProps) {
 
   return (
     <div className="space-y-5">
+      {/* Save feedback banner */}
+      {saveMsg && (
+        <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm border ${
+          saveMsg.type === "ok"
+            ? "bg-green-500/10 border-green-500/20 text-green-400"
+            : "bg-red-500/10 border-red-500/20 text-red-400"
+        }`}>
+          {saveMsg.type === "ok"
+            ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+            : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
+          {saveMsg.text}
+        </div>
+      )}
+
       {/* Stats bar */}
       <div className="grid grid-cols-4 gap-3">
         {[
