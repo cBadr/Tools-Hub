@@ -35,12 +35,41 @@ function buildAgent(type: string, host: string, port: number): http.Agent {
   return new HttpsProxyAgent(uri) as unknown as http.Agent;
 }
 
+interface RequestResult {
+  status: number;
+  headers: Record<string, string | string[] | undefined>;
+  body: string;
+}
+
+/**
+ * Makes an HTTP/HTTPS request through a proxy agent.
+ * - Uses an absolute timeout (setTimeout) so hanging proxies always get cut.
+ * - If no keyword is needed, resolves as soon as the response status arrives
+ *   (body is never read, so large pages never cause false "dead" results).
+ * - If a keyword is needed, reads up to 8 KB then stops.
+ */
 function makeRequest(
   url: string,
   agent: http.Agent,
   timeoutMs: number,
-): Promise<{ status: number; headers: Record<string, string | string[] | undefined>; body: string }> {
+  keyword?: string,
+): Promise<RequestResult> {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const done = (fn: () => void) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        fn();
+      }
+    };
+
+    // Absolute timeout — kills hanging connections regardless of socket state
+    const timer = global.setTimeout(() => {
+      done(() => reject(new Error("timeout")));
+      try { req.destroy(); } catch { /* ignore */ }
+    }, timeoutMs);
+
     const urlObj = new URL(url);
     const isHttps = urlObj.protocol === "https:";
     const mod = isHttps ? https : http;
@@ -52,41 +81,61 @@ function makeRequest(
         path: (urlObj.pathname || "/") + urlObj.search,
         method: "GET",
         agent,
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; ProxyCheck/1.0)" },
-        timeout: timeoutMs,
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
       },
       (res) => {
+        const status  = res.statusCode ?? 0;
+        const headers = res.headers as Record<string, string | string[] | undefined>;
+
+        if (!keyword) {
+          // No keyword — status code alone is enough, never read the body
+          done(() => resolve({ status, headers, body: "" }));
+          res.resume(); // drain silently so the socket can close cleanly
+          return;
+        }
+
+        // Keyword check — read up to 8 KB then stop
         let body = "";
         res.on("data", (chunk: Buffer) => {
           body += chunk.toString();
-          if (body.length > 65536) req.destroy();
+          if (body.length >= 8192) {
+            done(() => resolve({ status, headers, body }));
+            res.destroy();
+          }
         });
-        res.on("end", () => resolve({ status: res.statusCode ?? 0, headers: res.headers as any, body }));
+        res.on("end", () => done(() => resolve({ status, headers, body })));
+        res.on("error", () => done(() => resolve({ status, headers, body })));
       },
     );
 
-    req.on("timeout", () => req.destroy(new Error("timeout")));
-    req.on("error", reject);
+    req.on("error", (err) => done(() => reject(err)));
     req.end();
   });
 }
 
 function detectAnonymity(headers: Record<string, string | string[] | undefined>): string {
-  const headerNames = Object.keys(headers).map((k) => k.toLowerCase());
-  const proxyRevealers = ["via", "x-forwarded-for", "proxy-connection", "x-real-ip", "forwarded"];
-  const hasProxyHeader = proxyRevealers.some((ph) => headerNames.includes(ph));
-  if (!hasProxyHeader) return "elite";
+  const names = Object.keys(headers).map((k) => k.toLowerCase());
+  const reveals = ["via", "x-forwarded-for", "proxy-connection", "x-real-ip", "forwarded"];
+  if (!reveals.some((h) => names.includes(h))) return "elite";
   const xfwd = (headers["x-forwarded-for"] ?? "") as string;
-  if (xfwd.split(",").length > 1) return "transparent";
-  return "anonymous";
+  return xfwd.split(",").length > 1 ? "transparent" : "anonymous";
 }
 
-async function getProxyGeo(ip: string): Promise<{ country?: string; countryCode?: string; city?: string; isp?: string } | null> {
+async function getProxyGeo(
+  ip: string,
+): Promise<{ country?: string; countryCode?: string; city?: string; isp?: string } | null> {
   try {
-    const res = await fetch(`http://ip-api.com/json/${ip}?fields=country,countryCode,city,isp,status`, {
-      signal: AbortSignal.timeout(5000),
-    });
-    const data = await res.json() as any;
+    const res = await fetch(
+      `http://ip-api.com/json/${ip}?fields=country,countryCode,city,isp,status`,
+      { signal: AbortSignal.timeout(5000) },
+    );
+    const data = (await res.json()) as {
+      status: string;
+      country?: string;
+      countryCode?: string;
+      city?: string;
+      isp?: string;
+    };
     if (data.status !== "success") return null;
     return { country: data.country, countryCode: data.countryCode, city: data.city, isp: data.isp };
   } catch {
@@ -108,43 +157,47 @@ async function checkSingleProxy(
   }
 
   const t1 = Date.now();
+  let result: RequestResult;
   try {
-    const result = await makeRequest(testUrl, agent, timeoutMs);
-    const latencyMs = Date.now() - t1;
-
-    // Keyword check
-    if (testKeyword && !result.body.includes(testKeyword)) {
-      return { id: proxy.id, status: "dead", latencyMs };
-    }
-
-    // Jitter: second request
-    let jitterMs = 0;
-    try {
-      const t2 = Date.now();
-      await makeRequest(testUrl, agent, timeoutMs);
-      jitterMs = Math.abs((Date.now() - t2) - latencyMs);
-    } catch { /* jitter optional */ }
-
-    // Anonymity from response headers
-    const anonymity = detectAnonymity(result.headers);
-
-    // Geo lookup (direct, not through proxy)
-    const geo = await getProxyGeo(proxy.host);
-
-    return {
-      id: proxy.id,
-      status: "live",
-      latencyMs,
-      jitterMs,
-      anonymity,
-      country: geo?.country,
-      countryCode: geo?.countryCode,
-      city: geo?.city,
-      isp: geo?.isp,
-    };
+    result = await makeRequest(testUrl, agent, timeoutMs, testKeyword);
   } catch {
     return { id: proxy.id, status: "dead" };
   }
+
+  const latencyMs = Date.now() - t1;
+
+  // Any HTTP response means the proxy successfully tunneled the request.
+  // Only fail if: keyword specified but not found, or server error (5xx).
+  if (result.status === 0 || result.status >= 500) {
+    return { id: proxy.id, status: "dead", latencyMs };
+  }
+  if (testKeyword && result.body && !result.body.includes(testKeyword)) {
+    return { id: proxy.id, status: "dead", latencyMs };
+  }
+
+  const anonymity = detectAnonymity(result.headers);
+
+  // Jitter: second request (no body needed)
+  let jitterMs = 0;
+  try {
+    const t2 = Date.now();
+    await makeRequest(testUrl, agent, Math.min(timeoutMs, 8000));
+    jitterMs = Math.abs(Date.now() - t2 - latencyMs);
+  } catch { /* jitter is optional */ }
+
+  const geo = await getProxyGeo(proxy.host);
+
+  return {
+    id: proxy.id,
+    status: "live",
+    latencyMs,
+    jitterMs,
+    anonymity,
+    country:     geo?.country,
+    countryCode: geo?.countryCode,
+    city:        geo?.city,
+    isp:         geo?.isp,
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -163,17 +216,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No proxies provided" }, { status: 400 });
   }
 
-  // Cap at 100 concurrent checks
-  const proxies = body.proxies.slice(0, 100);
-  const testUrl  = body.testUrl || "https://www.google.com";
-  const timeoutMs = Math.min(Math.max(body.timeoutMs ?? 10000, 2000), 30000);
+  const proxies    = body.proxies.slice(0, 100);
+  const testUrl    = body.testUrl  || "https://www.google.com";
+  const timeoutMs  = Math.min(Math.max(body.timeoutMs ?? 10000, 2000), 25000);
 
   const settled = await Promise.allSettled(
-    proxies.map((p) => checkSingleProxy(p, testUrl, body.testKeyword, timeoutMs))
+    proxies.map((p) => checkSingleProxy(p, testUrl, body.testKeyword, timeoutMs)),
   );
 
   const results: CheckResult[] = settled.map((r, i) =>
-    r.status === "fulfilled" ? r.value : { id: proxies[i].id, status: "dead" }
+    r.status === "fulfilled" ? r.value : { id: proxies[i].id, status: "dead" },
   );
 
   return NextResponse.json({ results });
