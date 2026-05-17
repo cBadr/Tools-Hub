@@ -21,7 +21,8 @@ interface CheckSettings {
   testUrl: string;
   testKeyword: string;
   timeoutMs: number;
-  concurrency: number;
+  concurrency: number;  // proxies per API call (batch size)
+  threads: number;      // parallel API calls per wave (1-10)
 }
 
 export default function ProxyChecker({ config }: ToolProps) {
@@ -33,10 +34,11 @@ export default function ProxyChecker({ config }: ToolProps) {
   const [filterType,   setFilterType]   = useState("all");
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState<CheckSettings>({
-    testUrl:    cfg.defaultTestUrl    ?? "https://www.google.com",
+    testUrl:     cfg.defaultTestUrl    ?? "https://www.google.com",
     testKeyword: cfg.defaultTestKeyword ?? "",
-    timeoutMs:  (cfg.defaultTimeout   ?? 10) * 1000,
+    timeoutMs:   (cfg.defaultTimeout   ?? 10) * 1000,
     concurrency: cfg.defaultConcurrency ?? 50,
+    threads:     3,
   });
 
   const [checking,     setChecking]     = useState(false);
@@ -157,18 +159,10 @@ export default function ProxyChecker({ config }: ToolProps) {
   };
 
   // ── Checking ────────────────────────────────────────────────────────────
-  const runCheck = useCallback(async (toCheck: ProxyRow[]) => {
-    if (toCheck.length === 0 || checking) return;
-    stopRef.current = false;
-    setChecking(true);
-    setCheckProgress({ total: toCheck.length, checked: 0, live: 0, dead: 0, status: "running" });
+  type BatchResult = { id: string; status: string; latencyMs?: number; jitterMs?: number; country?: string; countryCode?: string; city?: string; isp?: string; anonymity?: string };
 
-    const concurrency = Math.min(Math.max(settings.concurrency, 1), 100);
-    let checked = 0, live = 0, dead = 0;
-
-    for (let i = 0; i < toCheck.length && !stopRef.current; i += concurrency) {
-      const batch = toCheck.slice(i, i + concurrency);
-
+  const fetchBatch = useCallback(async (batch: ProxyRow[]): Promise<BatchResult[]> => {
+    try {
       const res = await fetch("/api/proxy-checker/check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -179,29 +173,56 @@ export default function ProxyChecker({ config }: ToolProps) {
           timeoutMs: settings.timeoutMs,
         }),
       });
-
-      if (!res.ok) break;
+      if (!res.ok) return [];
       const data = await res.json();
-      const results: Array<{ id: string; status: string; latencyMs?: number; jitterMs?: number; country?: string; countryCode?: string; city?: string; isp?: string; anonymity?: string }> = data.results ?? [];
+      return (data.results ?? []) as BatchResult[];
+    } catch {
+      return [];
+    }
+  }, [settings]);
 
-      // Save results to DB
-      for (const r of results) {
-        await supabase.from("proxies").update({
+  const runCheck = useCallback(async (toCheck: ProxyRow[]) => {
+    if (toCheck.length === 0 || checking) return;
+    stopRef.current = false;
+    setChecking(true);
+    setCheckProgress({ total: toCheck.length, checked: 0, live: 0, dead: 0, status: "running" });
+
+    const batchSize = Math.min(Math.max(settings.concurrency, 1), 100);
+    const threads   = Math.min(Math.max(settings.threads, 1), 10);
+    const waveSize  = batchSize * threads;  // proxies processed per wave
+    const checkedAt = new Date().toISOString();
+    let checked = 0, live = 0, dead = 0;
+
+    for (let i = 0; i < toCheck.length && !stopRef.current; i += waveSize) {
+      // Build `threads` batches for this wave
+      const batches: ProxyRow[][] = [];
+      for (let t = 0; t < threads; t++) {
+        const slice = toCheck.slice(i + t * batchSize, i + (t + 1) * batchSize);
+        if (slice.length > 0) batches.push(slice);
+      }
+
+      // Fire all batches in parallel
+      const waveResults = await Promise.all(batches.map(fetchBatch));
+      const allResults = waveResults.flat();
+
+      // Bulk-save all results concurrently (parallel DB updates per wave)
+      await Promise.all(allResults.map((r) =>
+        supabase.from("proxies").update({
           status: r.status,
           latency_ms: r.latencyMs ?? null,
-          jitter_ms: r.jitterMs ?? null,
-          country: r.country ?? null,
+          jitter_ms:  r.jitterMs ?? null,
+          country:    r.country ?? null,
           country_code: r.countryCode ?? null,
-          city: r.city ?? null,
-          isp: r.isp ?? null,
-          anonymity: r.anonymity ?? null,
-          last_checked_at: new Date().toISOString(),
-        }).eq("id", r.id);
+          city:       r.city ?? null,
+          isp:        r.isp ?? null,
+          anonymity:  r.anonymity ?? null,
+          last_checked_at: checkedAt,
+        }).eq("id", r.id)
+      ));
 
-        checked++;
-        if (r.status === "live") live++;
-        else dead++;
-      }
+      checked += allResults.length;
+      live    += allResults.filter((r) => r.status === "live").length;
+      dead    += allResults.filter((r) => r.status === "dead").length;
 
       setCheckProgress({ total: toCheck.length, checked, live, dead, status: "running" });
       mutate();
@@ -210,7 +231,7 @@ export default function ProxyChecker({ config }: ToolProps) {
     setChecking(false);
     setCheckProgress((p) => p ? { ...p, status: stopRef.current ? "cancelled" : "completed" } : null);
     mutate();
-  }, [checking, settings, supabase, mutate]);
+  }, [checking, settings, fetchBatch, supabase, mutate]);
 
   const checkSelected = () => {
     const toCheck = (proxies ?? []).filter((r) => selected.has(r.id));
@@ -342,7 +363,15 @@ export default function ProxyChecker({ config }: ToolProps) {
       {/* Check settings panel */}
       {showSettings && (
         <div className="glass rounded-xl p-4 space-y-3 border border-white/5">
-          <p className="text-xs font-semibold text-white">Check Settings</p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-white">Check Settings</p>
+            <span className="text-[10px] text-slate-500">
+              Max simultaneous:{" "}
+              <span className="text-violet-400 font-semibold tabular-nums">
+                {Math.min(settings.concurrency, 100) * Math.min(settings.threads, 10)}
+              </span>
+            </span>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="col-span-2 space-y-1.5">
               <Label className="text-slate-500 text-[10px]">Test URL</Label>
@@ -365,11 +394,32 @@ export default function ProxyChecker({ config }: ToolProps) {
                 className="bg-white/5 border-white/10 text-white text-xs h-7" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-slate-500 text-[10px]">Concurrent (max 100)</Label>
+              <Label className="text-slate-500 text-[10px]">Per Thread (max 100)</Label>
               <Input type="number" min={1} max={100}
                 value={settings.concurrency}
                 onChange={(e) => setSettings((s) => ({ ...s, concurrency: Math.min(Number(e.target.value), 100) }))}
                 className="bg-white/5 border-white/10 text-white text-xs h-7" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[10px] flex items-center gap-1.5 text-violet-400/80">
+                Threads
+                <span className="text-[9px] text-slate-600 font-normal">parallel API calls</span>
+              </Label>
+              <div className="flex gap-1">
+                {[1, 2, 3, 5, 10].map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setSettings((s) => ({ ...s, threads: n }))}
+                    className={`flex-1 text-[11px] font-semibold py-1 rounded border transition-colors ${
+                      settings.threads === n
+                        ? "bg-violet-600/30 border-violet-500/40 text-violet-300"
+                        : "border-white/10 text-slate-500 hover:border-white/20 hover:text-white"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
