@@ -91,7 +91,41 @@ export function AddAccountDialog({ onAdded }: Props) {
   };
 
   const handleOAuth = (provider: "google" | "microsoft") => {
-    window.location.href = `/api/email-extractor/oauth/${provider}`;
+    const w = 600, h = 700;
+    const left = Math.round(window.screenX + (window.outerWidth  - w) / 2);
+    const top  = Math.round(window.screenY + (window.outerHeight - h) / 2);
+    const popup = window.open(
+      `/api/email-extractor/oauth/${provider}`,
+      `oauth_${provider}`,
+      `width=${w},height=${h},left=${left},top=${top},scrollbars=yes,resizable=yes`
+    );
+
+    // Fallback: popup blocked
+    if (!popup || popup.closed) {
+      window.location.href = `/api/email-extractor/oauth/${provider}`;
+      return;
+    }
+
+    const handleMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      if (e.data?.type !== "oauth_complete") return;
+      window.removeEventListener("message", handleMessage);
+      if (e.data.success) {
+        setOpen(false);
+        onAdded();
+      } else {
+        const msgs: Record<string, string> = {
+          oauth_denied: "تم رفض الصلاحية.",
+          invalid_state: "فشل التحقق الأمني، حاول مرة أخرى.",
+          token_exchange_failed: "فشل الحصول على التوكن.",
+          no_email: "تعذّر جلب عنوان البريد.",
+          db_error: "خطأ في حفظ الحساب.",
+        };
+        setTestResult({ ok: false, msg: msgs[e.data.error] ?? `OAuth error: ${e.data.error}` });
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
   };
 
   const isCustomHost = detected === null && email.includes("@");

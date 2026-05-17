@@ -7,28 +7,25 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL!;
+  const complete = (params: Record<string, string>) =>
+    NextResponse.redirect(`${appUrl}/auth/oauth-complete?${new URLSearchParams(params).toString()}`);
+
   const { searchParams } = new URL(request.url);
-  const code = searchParams.get("code");
+  const code  = searchParams.get("code");
   const state = searchParams.get("state");
   const error = searchParams.get("error");
 
-  if (error || !code) {
-    return NextResponse.redirect(`${appUrl}/tools/email-extractor?error=oauth_denied`);
-  }
+  if (error || !code) return complete({ error: "oauth_denied" });
 
-  // Verify CSRF state
   const cookieStore = await cookies();
   const cookieState = cookieStore.get("oauth_state")?.value;
   cookieStore.delete("oauth_state");
-  if (!cookieState || cookieState !== state) {
-    return NextResponse.redirect(`${appUrl}/tools/email-extractor?error=invalid_state`);
-  }
+  if (!cookieState || cookieState !== state) return complete({ error: "invalid_state" });
 
   const supabase = await createServerSupabase();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.redirect(`${appUrl}/login`);
 
-  // Exchange code for tokens
   const redirectUri = `${appUrl}/api/email-extractor/oauth/microsoft/callback`;
   const tokenRes = await fetch("https://login.microsoftonline.com/common/oauth2/v2.0/token", {
     method: "POST",
@@ -43,11 +40,8 @@ export async function GET(request: NextRequest) {
     }),
   });
   const tokens = await tokenRes.json();
-  if (!tokens.access_token) {
-    return NextResponse.redirect(`${appUrl}/tools/email-extractor?error=token_exchange_failed`);
-  }
+  if (!tokens.access_token) return complete({ error: "token_exchange_failed" });
 
-  // Decode id_token to get email (Microsoft sends it in id_token)
   let email = "";
   if (tokens.id_token) {
     try {
@@ -57,13 +51,10 @@ export async function GET(request: NextRequest) {
       email = payload.email ?? payload.preferred_username ?? "";
     } catch { /* ignore */ }
   }
-  if (!email) {
-    return NextResponse.redirect(`${appUrl}/tools/email-extractor?error=no_email`);
-  }
+  if (!email) return complete({ error: "no_email" });
 
   const expiresAt = new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000);
 
-  // Upsert account
   const { error: dbErr } = await supabase.from("email_accounts").upsert(
     {
       user_id: user.id,
@@ -80,9 +71,7 @@ export async function GET(request: NextRequest) {
     { onConflict: "user_id,email" }
   );
 
-  if (dbErr) {
-    return NextResponse.redirect(`${appUrl}/tools/email-extractor?error=db_error`);
-  }
+  if (dbErr) return complete({ error: "db_error" });
 
-  return NextResponse.redirect(`${appUrl}/tools/email-extractor?oauth=success&provider=outlook`);
+  return complete({ oauth: "success", provider: "outlook" });
 }
