@@ -178,12 +178,14 @@ export interface Database {
           referer: string | null;
           raw_geo: Json | null;
           raw_ua: Json | null;
+          recipient_email: string | null;
           telegram_sent: boolean;
           telegram_error: string | null;
           opened_at: string;
         };
         Insert: {
           campaign_id: string;
+          recipient_email?: string | null;
           ip_address?: string | null;
           ip_is_proxy?: boolean | null;
           ip_is_vpn?: boolean | null;

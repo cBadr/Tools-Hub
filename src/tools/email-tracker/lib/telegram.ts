@@ -6,13 +6,21 @@ interface NotificationPayload {
   botToken: string;
   chatId: string;
   campaignName: string;
+  recipientEmail: string | null;
   ip: string;
   geo: GeoData | null;
   ua: ReturnType<typeof parseUserAgent>;
 }
 
+function h(text: string | null | undefined): string {
+  return (text ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 export async function sendTelegramNotification(payload: NotificationPayload): Promise<string | null> {
-  const { botToken, chatId, campaignName, ip, geo, ua } = payload;
+  const { botToken, chatId, campaignName, recipientEmail, ip, geo, ua } = payload;
 
   const flag = geo?.countryCode ? getCountryFlag(geo.countryCode) : "🌐";
   const now = formatDateTime(new Date());
@@ -22,33 +30,36 @@ export async function sendTelegramNotification(payload: NotificationPayload): Pr
     : "Desktop";
 
   const deviceInfo = ua.device.vendor && ua.device.model
-    ? `${ua.device.vendor} ${ua.device.model}`
+    ? `${h(ua.device.vendor)} ${h(ua.device.model)}`
     : deviceType;
 
-  const text = [
-    `📧 *Email Opened!*`,
+  const lines: (string | null)[] = [
+    `📧 <b>Email Opened!</b>`,
     ``,
-    `📋 *Campaign:* ${escapeMarkdown(campaignName)}`,
-    `🕐 *Time:* ${now}`,
+    `📋 <b>Campaign:</b> ${h(campaignName)}`,
+    recipientEmail ? `✉️ <b>Recipient:</b> <code>${h(recipientEmail)}</code>` : null,
+    `🕐 <b>Time:</b> ${h(now)}`,
     ``,
-    `🌍 *Location*`,
+    `🌍 <b>Location</b>`,
     geo ? [
-      `  • Country: ${flag} ${geo.country} \\(${geo.countryCode}\\)`,
-      `  • Region: ${geo.regionName}`,
-      `  • City: ${geo.city}`,
-      `  • ISP: ${escapeMarkdown(geo.isp)}`,
+      `  • Country: ${flag} ${h(geo.country)} (${h(geo.countryCode)})`,
+      `  • Region: ${h(geo.regionName)}`,
+      `  • City: ${h(geo.city)}`,
+      `  • ISP: ${h(geo.isp)}`,
       geo.proxy ? `  • ⚠️ Proxy/VPN detected` : null,
     ].filter(Boolean).join("\n") : `  • Location unavailable`,
     ``,
-    `💻 *Device*`,
+    `💻 <b>Device</b>`,
     `  • Type: ${deviceInfo}`,
-    `  • OS: ${ua.os.name ?? "Unknown"} ${ua.os.version ?? ""}`.trim(),
-    `  • Browser: ${ua.browser.name ?? "Unknown"} ${ua.browser.version ?? ""}`.trim(),
+    `  • OS: ${h(ua.os.name ?? "Unknown")} ${h(ua.os.version ?? "")}`.trim(),
+    `  • Browser: ${h(ua.browser.name ?? "Unknown")} ${h(ua.browser.version ?? "")}`.trim(),
     ``,
-    `🔗 *Network*`,
-    `  • IP: \`${ip}\``,
-    ua.ua ? `  • UA: \`${ua.ua.slice(0, 80)}${ua.ua.length > 80 ? "…" : ""}\`` : null,
-  ].filter((line) => line !== null).join("\n");
+    `🔗 <b>Network</b>`,
+    `  • IP: <code>${h(ip)}</code>`,
+    ua.ua ? `  • UA: <code>${h(ua.ua.slice(0, 100))}${ua.ua.length > 100 ? "…" : ""}</code>` : null,
+  ];
+
+  const text = lines.filter((l) => l !== null).join("\n");
 
   try {
     const res = await fetch(
@@ -59,7 +70,7 @@ export async function sendTelegramNotification(payload: NotificationPayload): Pr
         body: JSON.stringify({
           chat_id: chatId,
           text,
-          parse_mode: "MarkdownV2",
+          parse_mode: "HTML",
         }),
       }
     );
@@ -73,8 +84,4 @@ export async function sendTelegramNotification(payload: NotificationPayload): Pr
   } catch (err) {
     return String(err);
   }
-}
-
-function escapeMarkdown(text: string): string {
-  return text.replace(/[_*[\]()~`>#+\-=|{}.!\\]/g, "\\$&");
 }

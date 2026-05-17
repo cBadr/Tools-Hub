@@ -11,22 +11,62 @@ const TRANSPARENT_GIF = Buffer.from(
   "base64"
 );
 
-const GIF_RESPONSE = () =>
-  new NextResponse(TRANSPARENT_GIF, {
-    status: 200,
-    headers: {
-      "Content-Type": "image/gif",
-      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-      "Pragma": "no-cache",
-      "Expires": "0",
-    },
-  });
+// Minimal valid WOFF2 file (8 bytes — triggers font load without rendering)
+const EMPTY_WOFF2 = Buffer.from("d09GMgABAAAAAAA", "base64");
+
+function makeResponse(type: string): NextResponse {
+  switch (type) {
+    case "css":
+      return new NextResponse("", {
+        status: 200,
+        headers: {
+          "Content-Type": "text/css; charset=utf-8",
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+          "Pragma": "no-cache",
+          "Expires": "0",
+        },
+      });
+    case "js":
+      return new NextResponse("", {
+        status: 200,
+        headers: {
+          "Content-Type": "application/javascript; charset=utf-8",
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+          "Pragma": "no-cache",
+          "Expires": "0",
+        },
+      });
+    case "font":
+      return new NextResponse(EMPTY_WOFF2, {
+        status: 200,
+        headers: {
+          "Content-Type": "font/woff2",
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+          "Pragma": "no-cache",
+          "Expires": "0",
+        },
+      });
+    default: // "img"
+      return new NextResponse(TRANSPARENT_GIF, {
+        status: 200,
+        headers: {
+          "Content-Type": "image/gif",
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          "Pragma": "no-cache",
+          "Expires": "0",
+        },
+      });
+  }
+}
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ trackingId: string }> }
 ) {
   const { trackingId } = await params;
+  const searchParams = request.nextUrl.searchParams;
+  const trackingType = searchParams.get("t") ?? "img";
+  const recipientEmail = searchParams.get("e") ?? null;
 
   const supabase = createServiceSupabase();
 
@@ -38,28 +78,25 @@ export async function GET(
     .single();
 
   if (!campaign || !campaign.is_active) {
-    return GIF_RESPONSE();
+    return makeResponse(trackingType);
   }
 
   // Extract request metadata
   const forwarded = request.headers.get("x-forwarded-for");
   const ipRaw = forwarded ? forwarded.split(",")[0].trim() : request.headers.get("x-real-ip") ?? "unknown";
-  const ip = ipRaw === "::1" || ipRaw === "127.0.0.1" ? "8.8.8.8" : ipRaw; // Use test IP for localhost
+  const ip = ipRaw === "::1" || ipRaw === "127.0.0.1" ? "8.8.8.8" : ipRaw;
   const userAgentStr = request.headers.get("user-agent") ?? "";
   const acceptLanguage = request.headers.get("accept-language") ?? null;
   const referer = request.headers.get("referer") ?? null;
 
-  // Parse user agent
   const ua = parseUserAgent(userAgentStr);
-
-  // Geo lookup (non-blocking — we'll insert after getting the data)
   const geo = await getGeoData(ip);
 
-  // Insert open event log
   const { data: eventRow, error: insertError } = await supabase
     .from("email_open_events")
     .insert({
       campaign_id: campaign.id,
+      recipient_email: recipientEmail,
       ip_address: ip,
       ip_is_proxy: geo?.proxy ?? null,
       ip_is_vpn: geo?.hosting ?? null,
@@ -95,7 +132,6 @@ export async function GET(
     .single();
 
   if (!insertError) {
-    // Update campaign counters
     await supabase
       .from("email_campaigns")
       .update({
@@ -104,12 +140,12 @@ export async function GET(
       })
       .eq("id", campaign.id);
 
-    // Send Telegram notification (async, fire and forget)
     sendTelegramNotificationAsync({
       supabase,
       campaignId: campaign.id,
       userId: campaign.user_id,
       campaignName: campaign.name,
+      recipientEmail,
       eventId: eventRow?.id,
       ip,
       geo,
@@ -117,7 +153,7 @@ export async function GET(
     });
   }
 
-  return GIF_RESPONSE();
+  return makeResponse(trackingType);
 }
 
 async function sendTelegramNotificationAsync({
@@ -125,6 +161,7 @@ async function sendTelegramNotificationAsync({
   campaignId,
   userId,
   campaignName,
+  recipientEmail,
   eventId,
   ip,
   geo,
@@ -134,12 +171,12 @@ async function sendTelegramNotificationAsync({
   campaignId: string;
   userId: string;
   campaignName: string;
+  recipientEmail: string | null;
   eventId: number | undefined;
   ip: string;
   geo: Awaited<ReturnType<typeof getGeoData>>;
   ua: ReturnType<typeof parseUserAgent>;
 }) {
-  // Get the user's Telegram config
   const { data: toolConfig } = await supabase
     .from("tool_configs")
     .select("config")
@@ -156,6 +193,7 @@ async function sendTelegramNotificationAsync({
     botToken: config.telegramBotToken,
     chatId: config.telegramChatId,
     campaignName,
+    recipientEmail,
     ip,
     geo,
     ua,
