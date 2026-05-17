@@ -4,9 +4,18 @@ export type EmailAccount  = Database["public"]["Tables"]["email_accounts"]["Row"
 export type ExtractionJob = Database["public"]["Tables"]["extraction_jobs"]["Row"];
 export type ExtractedContact = Database["public"]["Tables"]["extracted_contacts"]["Row"];
 
+export type ScanPhase = "imap" | "contacts" | "calendar";
+
 export interface ScanCursor {
+  phase: ScanPhase;
   folderIndex: number;
   seqFrom: number;
+}
+
+export interface JobConfig {
+  sources: ScanPhase[];
+  validateSyntax: boolean;
+  deduplicateGlobally: boolean;
 }
 
 export interface ImapPreset {

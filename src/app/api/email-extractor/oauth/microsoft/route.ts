@@ -26,7 +26,15 @@ export async function GET(request: NextRequest) {
     client_id: process.env.MICROSOFT_CLIENT_ID!,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope: "https://outlook.office.com/IMAP.AccessAsUser.All offline_access email profile openid",
+    scope: [
+      "https://outlook.office.com/IMAP.AccessAsUser.All",
+      "https://graph.microsoft.com/Contacts.Read",
+      "https://graph.microsoft.com/Calendars.Read",
+      "offline_access",
+      "email",
+      "profile",
+      "openid",
+    ].join(" "),
     response_mode: "query",
     state,
   });

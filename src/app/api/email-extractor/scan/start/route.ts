@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
+import type { JobConfig, ScanPhase } from "@/types/email-extractor-tool";
 
 export const dynamic = "force-dynamic";
 
@@ -9,13 +10,16 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { accountId, folders, maxMessages, batchSize, extractEmails, extractPhones } = body as {
+  const {
+    accountId, folders, maxMessages, batchSize, extractEmails, extractPhones, jobConfig,
+  } = body as {
     accountId: string;
     folders: string[] | null;
     maxMessages: number;
     batchSize: number;
     extractEmails: boolean;
     extractPhones: boolean;
+    jobConfig?: JobConfig;
   };
 
   const { data: account } = await supabase
@@ -26,6 +30,9 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (!account) return NextResponse.json({ error: "Account not found" }, { status: 404 });
+
+  const sources: ScanPhase[] = jobConfig?.sources?.length ? jobConfig.sources : ["imap"];
+  const initialPhase: ScanPhase = sources[0];
 
   const { data: job, error } = await supabase
     .from("extraction_jobs")
@@ -38,7 +45,8 @@ export async function POST(request: NextRequest) {
       batch_size: batchSize,
       extract_emails: extractEmails,
       extract_phones: extractPhones,
-      scan_cursor: { folderIndex: 0, seqFrom: 1 },
+      scan_cursor: { phase: initialPhase, folderIndex: 0, seqFrom: 1 },
+      job_config: (jobConfig ?? { sources: ["imap"], validateSyntax: false, deduplicateGlobally: false }) as any,
       started_at: new Date().toISOString(),
     })
     .select("id")

@@ -3,7 +3,6 @@ import { createServiceSupabase } from "@/lib/supabase/server";
 import { getGeoData } from "@/tools/email-tracker/lib/geo";
 import { parseUserAgent } from "@/tools/email-tracker/lib/ua";
 import { sendTelegramNotification } from "@/tools/email-tracker/lib/telegram";
-import type { TelegramConfig } from "@/types/email-tracker";
 
 // 1×1 transparent GIF
 const TRANSPARENT_GIF = Buffer.from(
@@ -180,21 +179,30 @@ async function sendTelegramNotificationAsync({
   geo: Awaited<ReturnType<typeof getGeoData>>;
   ua: ReturnType<typeof parseUserAgent>;
 }) {
-  const { data: toolConfig } = await supabase
-    .from("tool_configs")
-    .select("config")
-    .eq("user_id", userId)
-    .eq("tool_slug", "email-tracker")
-    .single();
+  const [{ data: globalTg }, { data: toolPrefs }] = await Promise.all([
+    supabase.from("tool_configs").select("config").eq("user_id", userId).eq("tool_slug", "_telegram").maybeSingle(),
+    supabase.from("tool_configs").select("config").eq("user_id", userId).eq("tool_slug", "email-tracker").maybeSingle(),
+  ]);
 
-  if (!toolConfig) return;
+  const tgCfg  = (globalTg?.config  ?? {}) as { botToken?: string; chatId?: string };
+  const prefs  = (toolPrefs?.config ?? {}) as { notificationsEnabled?: boolean; notifyOnFirstOpenOnly?: boolean };
 
-  const config = toolConfig.config as unknown as TelegramConfig;
-  if (!config.notificationsEnabled || !config.telegramBotToken || !config.telegramChatId) return;
+  if (!tgCfg.botToken || !tgCfg.chatId) return;
+  if (prefs.notificationsEnabled === false) return;
+
+  // First-open-only check
+  if (prefs.notifyOnFirstOpenOnly) {
+    const { count } = await supabase
+      .from("email_open_events")
+      .select("id", { count: "exact", head: true })
+      .eq("campaign_id", campaignId)
+      .eq("telegram_sent", true);
+    if ((count ?? 0) > 0) return;
+  }
 
   const error = await sendTelegramNotification({
-    botToken: config.telegramBotToken,
-    chatId: config.telegramChatId,
+    botToken: tgCfg.botToken,
+    chatId: tgCfg.chatId,
     campaignName,
     recipientEmail,
     referer,

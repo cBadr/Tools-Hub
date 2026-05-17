@@ -64,13 +64,16 @@ export function ScanStatusWidget({ accountLabel, progress, scanning, onStop, onD
             <Stat label="Phones"  value={progress?.totalPhones  ?? 0} color="text-cyan-400" />
           </div>
 
-          {/* Current folder */}
+          {/* Current folder / phase */}
           {progress?.currentFolder && !isDone && (
             <div className="flex items-center justify-between">
               <p className="text-[10px] text-slate-600 truncate flex-1">
-                {progress.currentFolder}
+                {progress.currentFolder === "contacts" ? "📋 Scanning contacts…"
+                  : progress.currentFolder === "calendar" ? "📅 Scanning calendar…"
+                  : progress.currentFolder.startsWith("phase:") ? `⟶ ${progress.currentFolder.slice(6)}`
+                  : progress.currentFolder}
               </p>
-              {progress.folderProgress && (
+              {progress.folderProgress && !progress.folderProgress.startsWith("phase:") && (
                 <span className="text-[10px] text-slate-700 ml-2 flex-shrink-0">
                   {progress.folderProgress}
                 </span>

@@ -286,6 +286,7 @@ export interface Database {
           emails_found: number;
           phones_found: number;
           scan_cursor: Json;
+          job_config: Json;
           error: string | null;
           started_at: string | null;
           completed_at: string | null;
@@ -305,6 +306,7 @@ export interface Database {
           emails_found?: number;
           phones_found?: number;
           scan_cursor?: Json;
+          job_config?: Json;
           error?: string | null;
           started_at?: string | null;
           completed_at?: string | null;
@@ -316,6 +318,7 @@ export interface Database {
           emails_found?: number;
           phones_found?: number;
           scan_cursor?: Json;
+          job_config?: Json;
           error?: string | null;
           started_at?: string | null;
           completed_at?: string | null;

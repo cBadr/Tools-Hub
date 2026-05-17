@@ -19,7 +19,7 @@ const JUNK_LOCAL_PREFIXES = [
   "abuse", "support", "info", "hello", "contact",
 ];
 
-function isValidEmailSyntax(email: string): boolean {
+export function isValidEmailSyntax(email: string): boolean {
   const parts = email.split("@");
   if (parts.length !== 2) return false;
   const [local, domain] = parts;
@@ -51,7 +51,7 @@ function isJunkEmail(email: string): boolean {
   return JUNK_LOCAL_PREFIXES.some((p) => localLower === p || localLower.startsWith(p + ".") || localLower.startsWith(p + "-") || localLower.startsWith(p + "_"));
 }
 
-function isValidPhoneSyntax(phone: string): boolean {
+export function isValidPhoneSyntax(phone: string): boolean {
   const digits = phone.replace(/\D/g, "");
   // 10–15 digits required
   if (digits.length < 10 || digits.length > 15) return false;
