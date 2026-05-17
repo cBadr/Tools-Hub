@@ -10,6 +10,7 @@ export interface Database {
           full_name: string | null;
           avatar_url: string | null;
           plan: "free" | "pro";
+          role: "admin" | "user";
           created_at: string;
           updated_at: string;
         };
@@ -19,6 +20,7 @@ export interface Database {
           full_name?: string | null;
           avatar_url?: string | null;
           plan?: "free" | "pro";
+          role?: "admin" | "user";
           created_at?: string;
           updated_at?: string;
         };
@@ -26,6 +28,7 @@ export interface Database {
           full_name?: string | null;
           avatar_url?: string | null;
           plan?: "free" | "pro";
+          role?: "admin" | "user";
           updated_at?: string;
         };
         Relationships: [];
