@@ -7,7 +7,8 @@ export interface ImapCreds {
   port: number;
   tls: boolean;
   email: string;
-  credentialsEnc: string;
+  credentialsEnc?: string | null;
+  accessTokenEnc?: string | null;
 }
 
 export interface FoundContact {
@@ -26,12 +27,14 @@ export interface BatchResult {
 }
 
 function buildClient(creds: ImapCreds): ImapFlow {
-  const password = decrypt(creds.credentialsEnc);
+  const auth = creds.accessTokenEnc
+    ? { user: creds.email, accessToken: decrypt(creds.accessTokenEnc) }
+    : { user: creds.email, pass: decrypt(creds.credentialsEnc!) };
   return new ImapFlow({
     host: creds.host,
     port: creds.port,
     secure: creds.tls,
-    auth: { user: creds.email, pass: password },
+    auth,
     logger: false,
     tls: { rejectUnauthorized: false },
   });

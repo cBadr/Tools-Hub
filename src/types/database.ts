@@ -234,7 +234,11 @@ export interface Database {
           imap_host: string;
           imap_port: number;
           imap_tls: boolean;
-          credentials_enc: string;
+          credentials_enc: string | null;
+          oauth_provider: string | null;
+          oauth_access_token_enc: string | null;
+          oauth_refresh_token_enc: string | null;
+          oauth_expires_at: string | null;
           is_active: boolean;
           last_synced_at: string | null;
           created_at: string;
@@ -247,7 +251,11 @@ export interface Database {
           imap_host: string;
           imap_port?: number;
           imap_tls?: boolean;
-          credentials_enc: string;
+          credentials_enc?: string | null;
+          oauth_provider?: string | null;
+          oauth_access_token_enc?: string | null;
+          oauth_refresh_token_enc?: string | null;
+          oauth_expires_at?: string | null;
           is_active?: boolean;
           last_synced_at?: string | null;
           created_at?: string;
@@ -255,7 +263,10 @@ export interface Database {
         Update: {
           label?: string;
           is_active?: boolean;
-          credentials_enc?: string;
+          credentials_enc?: string | null;
+          oauth_access_token_enc?: string | null;
+          oauth_refresh_token_enc?: string | null;
+          oauth_expires_at?: string | null;
           last_synced_at?: string | null;
         };
         Relationships: [];

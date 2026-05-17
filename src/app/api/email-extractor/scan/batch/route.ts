@@ -3,6 +3,8 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { createServiceSupabase } from "@/lib/supabase/server";
 import { scanBatch } from "@/tools/email-extractor/lib/imap";
 import { sendExtractionReport } from "@/tools/email-extractor/lib/report";
+import { refreshGoogleToken, refreshMicrosoftToken } from "@/tools/email-extractor/lib/oauth";
+import { encrypt, decrypt } from "@/tools/email-extractor/lib/crypto";
 import type { ScanCursor } from "@/types/email-extractor-tool";
 import type { TelegramConfig } from "@/types/email-tracker";
 
@@ -34,18 +36,47 @@ export async function POST(request: NextRequest) {
 
   const { data: accountRaw } = await supabase
     .from("email_accounts")
-    .select("email, imap_host, imap_port, imap_tls, credentials_enc")
+    .select("email, imap_host, imap_port, imap_tls, credentials_enc, oauth_provider, oauth_access_token_enc, oauth_refresh_token_enc, oauth_expires_at")
     .eq("id", job.account_id)
     .single();
 
   if (!accountRaw) return NextResponse.json({ error: "Account not found" }, { status: 404 });
   const account = accountRaw;
+
+  // For OAuth accounts, refresh access token if it expires within 5 minutes
+  let accessTokenEnc = account.oauth_access_token_enc;
+  if (account.oauth_provider && account.oauth_refresh_token_enc) {
+    const expiresAt = account.oauth_expires_at ? new Date(account.oauth_expires_at) : new Date(0);
+    const needsRefresh = expiresAt.getTime() < Date.now() + 5 * 60 * 1000;
+    if (needsRefresh) {
+      try {
+        const refreshToken = decrypt(account.oauth_refresh_token_enc);
+        const refreshed = account.oauth_provider === "gmail"
+          ? await refreshGoogleToken(refreshToken)
+          : await refreshMicrosoftToken(refreshToken);
+        accessTokenEnc = encrypt(refreshed.accessToken);
+        await supabase.from("email_accounts").update({
+          oauth_access_token_enc: accessTokenEnc,
+          oauth_expires_at: refreshed.expiresAt.toISOString(),
+        }).eq("id", job.account_id);
+      } catch (err) {
+        await supabase.from("extraction_jobs").update({
+          status: "failed",
+          error: `Token refresh failed: ${String(err).slice(0, 200)}`,
+          completed_at: new Date().toISOString(),
+        }).eq("id", jobId);
+        return NextResponse.json({ done: true, status: "failed", error: "Token refresh failed" });
+      }
+    }
+  }
+
   const creds = {
     email: account.email,
     host: account.imap_host,
     port: account.imap_port,
     tls: account.imap_tls,
     credentialsEnc: account.credentials_enc,
+    accessTokenEnc,
   };
 
   const cursor = (job.scan_cursor as unknown as ScanCursor) ?? { folderIndex: 0, seqFrom: 1 };
