@@ -1,4 +1,4 @@
-import { type NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse, after } from "next/server";
 import { createServiceSupabase } from "@/lib/supabase/server";
 import { getGeoData } from "@/tools/email-tracker/lib/geo";
 import { parseUserAgent } from "@/tools/email-tracker/lib/ua";
@@ -140,7 +140,7 @@ export async function GET(
       })
       .eq("id", campaign.id);
 
-    sendTelegramNotificationAsync({
+    after(sendTelegramNotificationAsync({
       supabase,
       campaignId: campaign.id,
       userId: campaign.user_id,
@@ -150,7 +150,7 @@ export async function GET(
       ip,
       geo,
       ua,
-    });
+    }));
   }
 
   return makeResponse(trackingType);

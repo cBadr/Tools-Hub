@@ -14,7 +14,7 @@ export default function EmailTrackerSettings({ config, onSave }: ToolSettingsPro
 
   const [botToken, setBotToken] = useState(cfg.telegramBotToken ?? "");
   const [chatId, setChatId] = useState(cfg.telegramChatId ?? "");
-  const [notificationsEnabled, setNotificationsEnabled] = useState(cfg.notificationsEnabled ?? false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(cfg.notificationsEnabled ?? true);
   const [firstOpenOnly, setFirstOpenOnly] = useState(cfg.notifyOnFirstOpenOnly ?? false);
   const [showToken, setShowToken] = useState(false);
   const [saving, setSaving] = useState(false);
