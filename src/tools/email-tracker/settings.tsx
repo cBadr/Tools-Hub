@@ -48,8 +48,8 @@ export default function EmailTrackerSettings({ config, onSave }: ToolSettingsPro
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             chat_id: chatId,
-            text: "✅ *Tools Hub* — Telegram connection is working!",
-            parse_mode: "MarkdownV2",
+            text: "✅ <b>Tools Hub</b> — Telegram connection is working!",
+            parse_mode: "HTML",
           }),
         }
       );
