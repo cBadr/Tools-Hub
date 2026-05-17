@@ -1,12 +1,13 @@
 import Link from "next/link";
-import { Mail, ArrowRight, Zap } from "lucide-react";
+import { Mail, Inbox, ArrowRight, Zap } from "lucide-react";
 import { toolRegistry } from "@/tools/_registry";
 import { Badge } from "@/components/ui/badge";
 
 export const metadata = { title: "Dashboard — Tools Hub" };
 
 const TOOL_ICONS: Record<string, React.ReactNode> = {
-  "email-tracker": <Mail className="w-5 h-5" />,
+  "email-tracker":   <Mail className="w-5 h-5" />,
+  "email-extractor": <Inbox className="w-5 h-5" />,
 };
 
 export default function DashboardPage() {
