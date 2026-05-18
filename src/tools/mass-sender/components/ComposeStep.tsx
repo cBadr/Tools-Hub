@@ -24,10 +24,10 @@ export function ComposeStep({ subject, bodyHtml, mode, onSubjectChange, onBodyCh
 
   // Preview: replace tags with sample data
   const previewHtml = bodyHtml
-    .replace(/\{\{firstName\}\}/gi, "أحمد")
-    .replace(/\{\{lastName\}\}/gi,  "محمد")
-    .replace(/\{\{company\}\}/gi,   "شركة مثال")
-    .replace(/\{\{email\}\}/gi,     "ahmed@example.com");
+    .replace(/\{\{firstName\}\}/gi, "John")
+    .replace(/\{\{lastName\}\}/gi,  "Smith")
+    .replace(/\{\{company\}\}/gi,   "Acme Corp")
+    .replace(/\{\{email\}\}/gi,     "john@example.com");
 
   const insertTag = useCallback((tag: string) => {
     onBodyChange(bodyHtml + tag);
@@ -61,7 +61,7 @@ export function ComposeStep({ subject, bodyHtml, mode, onSubjectChange, onBodyCh
           )}
         >
           <Mail className="w-3.5 h-3.5" />
-          إيميل جديد
+          New Email
         </button>
         <button
           type="button"
@@ -74,17 +74,17 @@ export function ComposeStep({ subject, bodyHtml, mode, onSubjectChange, onBodyCh
           )}
         >
           <MessageSquareReply className="w-3.5 h-3.5" />
-          رد على محادثة موجودة
+          Reply to existing thread
         </button>
       </div>
 
       {/* Subject */}
       <div className="space-y-1.5">
-        <label className="text-xs text-slate-400 font-medium">الموضوع</label>
+        <label className="text-xs text-slate-400 font-medium">Subject</label>
         <Input
           value={subject}
           onChange={(e) => onSubjectChange(e.target.value)}
-          placeholder="مرحباً {{firstName}}، لدينا عرض خاص لك"
+          placeholder="Hello {{firstName}}, we have a special offer for you"
           className="h-9 bg-white/3 border-white/8 text-sm"
         />
       </div>
@@ -137,7 +137,7 @@ export function ComposeStep({ subject, bodyHtml, mode, onSubjectChange, onBodyCh
         <textarea
           value={bodyHtml}
           onChange={(e) => onBodyChange(e.target.value)}
-          placeholder="<p>مرحباً {{firstName}}،</p><p>رسالتك هنا...</p>"
+          placeholder="<p>Hello {{firstName}},</p><p>Your message here...</p>"
           className="w-full h-64 rounded-xl border border-white/8 bg-white/3 px-4 py-3 text-sm text-slate-300 font-mono resize-none focus:outline-none focus:ring-1 focus:ring-violet-500/50 placeholder:text-slate-600"
           spellCheck={false}
         />

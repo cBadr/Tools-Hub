@@ -23,30 +23,30 @@ export function ReviewStep({ campaignName, subject, recipients, settings, mode, 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
-        <StatCard icon={<Users className="w-4 h-4 text-violet-400" />} label="إجمالي المستلمين" value={recipients.length.toLocaleString()} />
-        <StatCard icon={<Mail className="w-4 h-4 text-indigo-400" />} label="وضع الإرسال" value={mode === "reply" ? "رد على محادثة" : "إيميل جديد"} />
-        <StatCard icon={<Clock className="w-4 h-4 text-blue-400" />} label="وقت الإنجاز التقديري" value={`~${estHours} ساعة`} />
-        <StatCard icon={<Shield className="w-4 h-4 text-green-400" />} label="سرعة الإرسال" value={`${settings.rateLimitPerHour} / ساعة`} />
+        <StatCard icon={<Users className="w-4 h-4 text-violet-400" />} label="Total recipients" value={recipients.length.toLocaleString()} />
+        <StatCard icon={<Mail className="w-4 h-4 text-indigo-400" />} label="Send mode" value={mode === "reply" ? "Reply to thread" : "New email"} />
+        <StatCard icon={<Clock className="w-4 h-4 text-blue-400" />} label="Estimated time" value={`~${estHours}h`} />
+        <StatCard icon={<Shield className="w-4 h-4 text-green-400" />} label="Sending rate" value={`${settings.rateLimitPerHour} / hour`} />
       </div>
 
       <div className="rounded-xl border border-white/8 bg-white/2 px-4 py-3 space-y-2">
         <div className="flex justify-between text-xs">
-          <span className="text-slate-500">اسم الحملة</span>
+          <span className="text-slate-500">Campaign name</span>
           <span className="text-slate-300 font-medium truncate max-w-48">{campaignName}</span>
         </div>
         <div className="flex justify-between text-xs">
-          <span className="text-slate-500">الموضوع</span>
+          <span className="text-slate-500">Subject</span>
           <span className="text-slate-300 truncate max-w-48">{subject}</span>
         </div>
         {settings.useProxy && (
           <div className="flex justify-between text-xs">
-            <span className="text-slate-500">البروكسي</span>
-            <span className="text-green-400">مُفعّل</span>
+            <span className="text-slate-500">Proxy</span>
+            <span className="text-green-400">Enabled</span>
           </div>
         )}
         {mode === "reply" && (
           <div className="flex justify-between text-xs">
-            <span className="text-slate-500">البحث في</span>
+            <span className="text-slate-500">Search in</span>
             <span className="text-slate-300">{settings.threadSearchFolder === "custom" ? settings.threadCustomFolder : settings.threadSearchFolder}</span>
           </div>
         )}
@@ -60,12 +60,12 @@ export function ReviewStep({ campaignName, subject, recipients, settings, mode, 
         {launching ? (
           <span className="flex items-center gap-2">
             <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-            جارٍ إنشاء الحملة...
+            Creating campaign...
           </span>
         ) : (
           <>
             <Rocket className="w-4 h-4" />
-            إطلاق الحملة
+            Launch Campaign
           </>
         )}
       </Button>

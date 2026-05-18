@@ -16,7 +16,7 @@ interface Props {
   onCreated: () => void;
 }
 
-const STEPS = ["المستلمون", "التأليف", "إعدادات الإرسال", "مراجعة وإطلاق"];
+const STEPS = ["Recipients", "Compose", "Send Settings", "Review & Launch"];
 
 const DEFAULT_SETTINGS: SenderSettings = {
   rateLimitPerHour:   20,
@@ -81,7 +81,7 @@ export function CampaignWizard({ onClose, onCreated }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/8">
           <div>
-            <h2 className="text-base font-bold text-slate-100">حملة إرسال جديدة</h2>
+            <h2 className="text-base font-bold text-slate-100">New Campaign</h2>
             <p className="text-xs text-slate-500 mt-0.5">{STEPS[step]}</p>
           </div>
           <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/5 text-slate-500 hover:text-slate-300 transition-colors">
@@ -121,7 +121,7 @@ export function CampaignWizard({ onClose, onCreated }: Props) {
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="اسم الحملة (للرجوع إليها لاحقاً)"
+              placeholder="Campaign name (for your reference)"
               className="h-9 bg-white/3 border-white/8 text-sm"
             />
           </div>
@@ -168,7 +168,7 @@ export function CampaignWizard({ onClose, onCreated }: Props) {
               disabled={step === 0}
               className="gap-1.5 text-slate-400"
             >
-              <ChevronLeft className="w-4 h-4" /> السابق
+              <ChevronLeft className="w-4 h-4" /> Back
             </Button>
             <Button
               size="sm"
@@ -176,7 +176,7 @@ export function CampaignWizard({ onClose, onCreated }: Props) {
               disabled={!canNext}
               className="gap-1.5 bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-40"
             >
-              التالي <ChevronRight className="w-4 h-4" />
+              Next <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
         )}

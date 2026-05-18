@@ -13,14 +13,14 @@ interface Props {
 }
 
 const FIX_LABELS: Partial<Record<keyof OptimizeOptions, string>> = {
-  fixMissingAlt:     "إضافة alt للصور",
-  fixImageDimensions: "تحديد أبعاد الصور",
-  replaceCssLayouts: "تحويل Flex/Grid لجداول",
-  removeDisplayNone: "إزالة العناصر المخفية",
-  fixRelativeLinks:  "إصلاح الروابط النسبية",
-  inlineCss:         "تحويل CSS إلى Inline",
-  addPlainText:      "إضافة نسخة Plain Text",
-  imagesToBase64:    "تحويل الصور لـ Base64",
+  fixMissingAlt:     "Add alt to images",
+  fixImageDimensions: "Set image dimensions",
+  replaceCssLayouts: "Convert Flex/Grid to tables",
+  removeDisplayNone: "Remove hidden elements",
+  fixRelativeLinks:  "Fix relative links",
+  inlineCss:         "Convert CSS to inline",
+  addPlainText:      "Add plain-text version",
+  imagesToBase64:    "Convert images to Base64",
 };
 
 export function InboxScorePanel({ html, onOptimize, baseUrl }: Props) {
@@ -65,7 +65,7 @@ export function InboxScorePanel({ html, onOptimize, baseUrl }: Props) {
           <div className="text-left">
             <p className="text-sm font-semibold text-slate-200">Inbox Score</p>
             <p className="text-[11px] text-slate-500">
-              {score >= 85 ? "جيد جداً" : score >= 60 ? "يحتاج تحسين" : "خطر Spam"}
+              {score >= 85 ? "Great" : score >= 60 ? "Needs improvement" : "Spam risk"}
             </p>
           </div>
         </div>
@@ -82,7 +82,7 @@ export function InboxScorePanel({ html, onOptimize, baseUrl }: Props) {
         <div className="px-4 pb-4 space-y-2 border-t border-white/5 pt-3">
           {issues.length === 0 ? (
             <p className="text-[12px] text-green-400 flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5" /> لا توجد مشاكل — ممتاز!
+              <CheckCircle2 className="w-3.5 h-3.5" /> No issues — excellent!
             </p>
           ) : (
             issues.map((issue) => <IssueRow key={issue.id} issue={issue} onFix={(key) => onOptimize({ [key]: true, baseUrl })} />)
@@ -96,7 +96,7 @@ export function InboxScorePanel({ html, onOptimize, baseUrl }: Props) {
               className="mt-3 w-full h-8 text-xs border-violet-500/30 text-violet-300 hover:bg-violet-500/10 gap-1.5"
             >
               <Zap className="w-3 h-3" />
-              إصلاح كل شيء تلقائياً
+              Fix all automatically
             </Button>
           )}
         </div>

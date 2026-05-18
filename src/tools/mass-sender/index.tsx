@@ -44,11 +44,11 @@ function useStats() {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-  draft:     { label: "مسودة",   color: "text-slate-400", icon: <Clock className="w-3 h-3" /> },
-  running:   { label: "جارٍ",    color: "text-green-400",  icon: <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" /> },
-  paused:    { label: "موقف",    color: "text-yellow-400", icon: <Pause className="w-3 h-3" /> },
-  completed: { label: "مكتمل",  color: "text-violet-400", icon: <CheckCircle2 className="w-3 h-3" /> },
-  cancelled: { label: "ملغي",   color: "text-red-400",    icon: <XCircle className="w-3 h-3" /> },
+  draft:     { label: "Draft",     color: "text-slate-400", icon: <Clock className="w-3 h-3" /> },
+  running:   { label: "Running",   color: "text-green-400",  icon: <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" /> },
+  paused:    { label: "Paused",    color: "text-yellow-400", icon: <Pause className="w-3 h-3" /> },
+  completed: { label: "Completed", color: "text-violet-400", icon: <CheckCircle2 className="w-3 h-3" /> },
+  cancelled: { label: "Cancelled", color: "text-red-400",    icon: <XCircle className="w-3 h-3" /> },
 };
 
 export default function MassSender() {
@@ -58,7 +58,7 @@ export default function MassSender() {
   const [showWizard, setShowWizard] = useState(false);
 
   async function deleteCampaign(id: string) {
-    if (!confirm("حذف هذه الحملة وجميع مستلميها؟")) return;
+    if (!confirm("Delete this campaign and all its recipients?")) return;
     await supabase.from("mass_campaigns").delete().eq("id", id);
     mutate();
   }
@@ -87,23 +87,23 @@ export default function MassSender() {
             <Send className="w-5 h-5 text-violet-400" />
             Mass Sender
           </h1>
-          <p className="text-sm text-slate-500 mt-0.5">إرسال إيميلات مخصصة بشكل احترافي</p>
+          <p className="text-sm text-slate-500 mt-0.5">Send personalized emails at scale</p>
         </div>
         <Button
           onClick={() => setShowWizard(true)}
           className="gap-2 bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-900/30"
         >
           <Plus className="w-4 h-4" />
-          حملة جديدة
+          New Campaign
         </Button>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: "الحملات",   value: stats?.campaigns, icon: <BarChart3 className="w-4 h-4 text-violet-400" />, color: "from-violet-500/10" },
-          { label: "إيميلات مُرسَلة", value: stats?.sent, icon: <CheckCircle2 className="w-4 h-4 text-green-400" />, color: "from-green-500/10" },
-          { label: "حملات نشطة", value: stats?.running, icon: <Send className="w-4 h-4 text-indigo-400" />, color: "from-indigo-500/10" },
+          { label: "Campaigns",    value: stats?.campaigns, icon: <BarChart3 className="w-4 h-4 text-violet-400" />, color: "from-violet-500/10" },
+          { label: "Emails sent",  value: stats?.sent,      icon: <CheckCircle2 className="w-4 h-4 text-green-400" />, color: "from-green-500/10" },
+          { label: "Active",       value: stats?.running,   icon: <Send className="w-4 h-4 text-indigo-400" />, color: "from-indigo-500/10" },
         ].map(({ label, value, icon, color }) => (
           <div key={label} className={cn("rounded-xl border border-white/8 bg-gradient-to-br to-transparent p-4", color)}>
             <div className="flex items-center gap-2 mb-1">
@@ -124,18 +124,18 @@ export default function MassSender() {
             <div className="flex items-center gap-2">
               <span className={cn("w-2 h-2 rounded-full", progress.status === "paused" ? "bg-yellow-400" : "bg-indigo-400 animate-pulse")} />
               <span className="text-sm font-semibold text-indigo-300">
-                {progress.status === "paused" ? "الإرسال موقوف" : "الإرسال جارٍ"}: {progress.campaignName}
+                {progress.status === "paused" ? "Send paused" : "Sending"}: {progress.campaignName}
               </span>
             </div>
             <div className="flex gap-2">
               {progress.status === "running" ? (
                 <Button size="sm" variant="outline" className="h-7 text-xs border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10" onClick={pauseCampaign}>
-                  <Pause className="w-3 h-3 ml-1" /> إيقاف مؤقت
+                  <Pause className="w-3 h-3 ml-1" /> Pause
                 </Button>
               ) : (
                 <Button size="sm" variant="outline" className="h-7 text-xs border-green-500/30 text-green-400 hover:bg-green-500/10"
                   onClick={() => { const c = campaigns?.find((x) => x.id === progress.campaignId); if (c) resumeCampaign(c); }}>
-                  <Play className="w-3 h-3 ml-1" /> استئناف
+                  <Play className="w-3 h-3 ml-1" /> Resume
                 </Button>
               )}
             </div>
@@ -147,16 +147,16 @@ export default function MassSender() {
             />
           </div>
           <div className="flex justify-between text-[11px] text-slate-500 tabular-nums">
-            <span className="text-green-400">{progress.sent.toLocaleString()} مُرسَل</span>
+            <span className="text-green-400">{progress.sent.toLocaleString()} sent</span>
             <span>{progress.sent.toLocaleString()} / {progress.total.toLocaleString()}</span>
-            <span className="text-red-400">{progress.failed} فشل</span>
+            <span className="text-red-400">{progress.failed} failed</span>
           </div>
         </div>
       )}
 
       {/* Campaign list */}
       <div className="space-y-3">
-        <h2 className="text-sm font-semibold text-slate-300">الحملات</h2>
+        <h2 className="text-sm font-semibold text-slate-300">Campaigns</h2>
 
         {isLoading ? (
           Array.from({ length: 3 }).map((_, i) => (
@@ -165,13 +165,13 @@ export default function MassSender() {
         ) : !campaigns?.length ? (
           <div className="rounded-xl border border-white/8 bg-white/2 py-16 text-center">
             <Send className="w-10 h-10 text-slate-700 mx-auto mb-3" />
-            <p className="text-slate-500 text-sm">لا توجد حملات بعد</p>
+            <p className="text-slate-500 text-sm">No campaigns yet</p>
             <Button
               size="sm"
               className="mt-4 gap-1.5 bg-violet-600/80 hover:bg-violet-500 text-white"
               onClick={() => setShowWizard(true)}
             >
-              <Plus className="w-3.5 h-3.5" /> أنشئ أول حملة
+              <Plus className="w-3.5 h-3.5" /> Create your first campaign
             </Button>
           </div>
         ) : (
@@ -204,7 +204,7 @@ function CampaignCard({ campaign: c, onResume, onDelete }: { campaign: MassCampa
             </span>
             <span className="text-slate-600 text-[10px]">·</span>
             <span className="text-[10px] text-slate-600">
-              {new Date(c.created_at).toLocaleDateString("ar-SA")}
+              {new Date(c.created_at).toLocaleDateString("en-US")}
             </span>
           </div>
           <h3 className="text-sm font-semibold text-slate-200 truncate">{c.name}</h3>
@@ -233,10 +233,10 @@ function CampaignCard({ campaign: c, onResume, onDelete }: { campaign: MassCampa
           />
         </div>
         <div className="flex justify-between text-[10px] text-slate-600 tabular-nums">
-          <span className="text-green-500">{c.sent_count.toLocaleString()} مُرسَل</span>
+          <span className="text-green-500">{c.sent_count.toLocaleString()} sent</span>
           <span>{pct}%</span>
-          {c.failed_count > 0 && <span className="text-red-400">{c.failed_count} فشل</span>}
-          <span>{c.total_recipients.toLocaleString()} إجمالي</span>
+          {c.failed_count > 0 && <span className="text-red-400">{c.failed_count} failed</span>}
+          <span>{c.total_recipients.toLocaleString()} total</span>
         </div>
       </div>
     </div>

@@ -94,22 +94,22 @@ export function RecipientStep({ selected, onChange }: Props) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Users className="w-4 h-4 text-violet-400" />
-          <span className="text-sm font-semibold text-slate-200">اختر المستلمين</span>
+          <span className="text-sm font-semibold text-slate-200">Select Recipients</span>
           {selected.length > 0 && (
             <Badge className="text-[10px] px-1.5 py-0 h-4 bg-violet-600/30 text-violet-300 border-violet-500/30">
-              {selected.length.toLocaleString()} مختار
+              {selected.length.toLocaleString()} selected
             </Badge>
           )}
         </div>
         <div className="flex gap-2">
-          <Button size="sm" variant="ghost" className="h-7 text-xs text-slate-400" onClick={selectAll}>تحديد الكل</Button>
+          <Button size="sm" variant="ghost" className="h-7 text-xs text-slate-400" onClick={selectAll}>Select all</Button>
           {selected.length > 0 && (
             <Button size="sm" variant="ghost" className="h-7 text-xs text-red-400/70 hover:text-red-400" onClick={clearAll}>
-              <Trash2 className="w-3 h-3 ml-1" /> إلغاء الكل
+              <Trash2 className="w-3 h-3 ml-1" /> Clear all
             </Button>
           )}
           <Button size="sm" variant="outline" className="h-7 text-xs border-white/10" onClick={() => fileRef.current?.click()}>
-            <Upload className="w-3 h-3 ml-1" /> استيراد CSV
+            <Upload className="w-3 h-3 ml-1" /> Import CSV
           </Button>
           <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleCsv} />
         </div>
@@ -120,7 +120,7 @@ export function RecipientStep({ selected, onChange }: Props) {
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="بحث بالإيميل أو الاسم..."
+          placeholder="Search by email or name..."
           className="pr-9 h-8 text-sm bg-white/3 border-white/8"
         />
       </div>
@@ -129,7 +129,7 @@ export function RecipientStep({ selected, onChange }: Props) {
         <div className="max-h-72 overflow-y-auto divide-y divide-white/5">
           {filtered.length === 0 ? (
             <div className="py-8 text-center text-slate-500 text-sm">
-              {contacts.length === 0 ? "لا توجد جهات اتصال مستخرجة بعد" : "لا توجد نتائج"}
+              {contacts.length === 0 ? "No extracted contacts yet" : "No results"}
             </div>
           ) : (
             filtered.slice(0, 200).map((row) => {
@@ -158,7 +158,7 @@ export function RecipientStep({ selected, onChange }: Props) {
         </div>
         {filtered.length > 200 && (
           <div className="px-4 py-2 text-[11px] text-slate-600 border-t border-white/5">
-            يظهر 200 من {filtered.length.toLocaleString()} — استخدم البحث لتضييق النطاق
+            Showing 200 of {filtered.length.toLocaleString()} — use search to narrow results
           </div>
         )}
       </div>

@@ -35,10 +35,10 @@ function useLiveProxyCount() {
 }
 
 const FOLDERS = [
-  { value: "all",   label: "كل المجلدات" },
+  { value: "all",   label: "All folders" },
   { value: "INBOX", label: "INBOX" },
   { value: "SENT",  label: "SENT" },
-  { value: "custom", label: "مجلد مخصص..." },
+  { value: "custom", label: "Custom folder..." },
 ];
 
 export function SenderStep({ mode, settings, onChange }: Props) {
@@ -54,7 +54,7 @@ export function SenderStep({ mode, settings, onChange }: Props) {
       <div className="space-y-3">
         <div className="flex items-center gap-2">
           <Clock className="w-4 h-4 text-violet-400" />
-          <span className="text-sm font-semibold text-slate-200">سرعة الإرسال</span>
+          <span className="text-sm font-semibold text-slate-200">Sending Rate</span>
         </div>
         <div className="flex items-center gap-3">
           <input
@@ -68,11 +68,11 @@ export function SenderStep({ mode, settings, onChange }: Props) {
           />
           <div className="w-24 text-center">
             <span className="text-lg font-bold text-violet-300">{s.rateLimitPerHour}</span>
-            <span className="text-xs text-slate-500"> / ساعة</span>
+            <span className="text-xs text-slate-500"> / hour</span>
           </div>
         </div>
         <p className="text-[11px] text-slate-600">
-          تأخير عشوائي 30–90 ثانية بين كل إرسال · وقت الإنجاز التقديري لـ 100 إيميل: ~{estimatedHours} ساعة
+          Random 30–90s delay between sends · Estimated time for 100 emails: ~{estimatedHours}h
         </p>
       </div>
 
@@ -81,10 +81,10 @@ export function SenderStep({ mode, settings, onChange }: Props) {
         <div className="flex items-center gap-2.5">
           <Shield className="w-4 h-4 text-slate-400" />
           <div>
-            <p className="text-sm text-slate-300">استخدام البروكسيهات النشطة</p>
+            <p className="text-sm text-slate-300">Use active proxies</p>
             <p className="text-[11px] text-slate-600">
-              {liveCount} بروكسي نشط متاح
-              {liveCount === 0 ? " — تحقق من أداة Proxy Checker" : ""}
+              {liveCount} live {liveCount === 1 ? "proxy" : "proxies"} available
+              {liveCount === 0 ? " — check Proxy Checker tool" : ""}
             </p>
           </div>
         </div>
@@ -100,11 +100,11 @@ export function SenderStep({ mode, settings, onChange }: Props) {
         <div className="space-y-3 p-4 rounded-xl border border-indigo-500/20 bg-indigo-500/5">
           <div className="flex items-center gap-2">
             <Folder className="w-4 h-4 text-indigo-400" />
-            <span className="text-sm font-semibold text-indigo-300">إعدادات البحث عن المحادثات</span>
+            <span className="text-sm font-semibold text-indigo-300">Thread Search Settings</span>
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs text-slate-400">البحث في مجلد</label>
+            <label className="text-xs text-slate-400">Search in folder</label>
             <div className="grid grid-cols-2 gap-2">
               {FOLDERS.map((f) => (
                 <button
@@ -125,14 +125,14 @@ export function SenderStep({ mode, settings, onChange }: Props) {
               <Input
                 value={s.threadCustomFolder}
                 onChange={(e) => set({ threadCustomFolder: e.target.value })}
-                placeholder="اسم المجلد (e.g. Work/Projects)"
+                placeholder="Folder name (e.g. Work/Projects)"
                 className="h-8 text-xs bg-white/3 border-white/8 mt-2"
               />
             )}
           </div>
 
           <div className="flex items-center justify-between">
-            <Label className="text-xs text-slate-400">إضافة "Re:" للموضوع تلقائياً</Label>
+            <Label className="text-xs text-slate-400">Auto-prepend "Re:" to subject</Label>
             <Switch checked={s.addRePrefix} onCheckedChange={(v) => set({ addRePrefix: v })} />
           </div>
         </div>
