@@ -5,7 +5,7 @@ import { Tag, Eye, Code2, MessageSquareReply, Mail } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { InboxScorePanel } from "./InboxScorePanel";
-import type { OptimizeOptions } from "../lib/html-optimizer";
+import type { OptimizeOptions } from "../lib/html-scorer";
 import { cn } from "@/lib/utils";
 
 interface Props {

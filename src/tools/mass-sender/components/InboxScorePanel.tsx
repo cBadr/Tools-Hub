@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { CheckCircle2, AlertTriangle, XCircle, Zap, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { scoreHtml, type HtmlIssue, type OptimizeOptions } from "../lib/html-optimizer";
+import { scoreHtml, type HtmlIssue, type OptimizeOptions } from "../lib/html-scorer";
 import { cn } from "@/lib/utils";
 
 interface Props {
